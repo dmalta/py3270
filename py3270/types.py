@@ -6,11 +6,11 @@ from typing import Literal
 
 
 class TerminalMode(StrEnum):
-    P = "P"
-    S = "S"
-    N = "N"
-    L = "L"
-    B = "B"
+    Passthru = "P"
+    SuppressExtendedDS = "S"
+    NoTN3270E = "N"
+    SSLTunnel = "L"
+    BindStrict = "B"
 
 
 class TerminalSetting(StrEnum):
@@ -33,32 +33,32 @@ class StatusFlag(StrEnum):
 
 
 class KeyboardState(StrEnum):
-    U = "U"
-    L = "L"
-    E = "E"
+    Unlocked = "U"
+    Locked = "L"
+    Error = "E"
 
 
 class ScreenFormatting(StrEnum):
-    F = "F"
-    U = "U"
+    Formatted = "F"
+    Unformatted = "U"
 
 
 class FieldProtection(StrEnum):
-    P = "P"
-    U = "U"
+    Protected = "P"
+    Unprotected = "U"
 
 
 class ConnectionState(StrEnum):
-    C = "C"
-    N = "N"
+    Connected = "C"
+    NotConnected = "N"
 
 
 class EmulatorMode(StrEnum):
-    I = "I"  # noqa: E741
-    L = "L"
-    C = "C"
-    P = "P"
-    N = "N"
+    Mode3270 = "I"
+    NVTLine = "L"
+    NVTCharacter = "C"
+    Unnegotiated = "P"
+    NotConnected = "N"
 
 
 @dataclass

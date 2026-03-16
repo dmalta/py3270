@@ -74,7 +74,7 @@ def test_enum_members(enum_cls: type[enum.Enum], expected: list[str]) -> None:
 
 
 def test_keyboard_state_matches_string_value() -> None:
-    assert KeyboardState.U == "U"
+    assert KeyboardState.Unlocked == "U"
 
 
 def test_screen_dataclasses() -> None:
@@ -118,12 +118,12 @@ def test_status_info_field_shape() -> None:
 
 def test_status_info_instantiation() -> None:
     status = StatusInfo(
-        keyboard_state=KeyboardState.U,
-        screen_formatting=ScreenFormatting.F,
-        field_protection=FieldProtection.U,
-        connection_state=ConnectionState.C,
+        keyboard_state=KeyboardState.Unlocked,
+        screen_formatting=ScreenFormatting.Formatted,
+        field_protection=FieldProtection.Unprotected,
+        connection_state=ConnectionState.Connected,
         host="mvshost",
-        emulator_mode=EmulatorMode.C,
+        emulator_mode=EmulatorMode.NVTCharacter,
         model_number=2,
         rows=24,
         cols=80,
@@ -140,12 +140,12 @@ def test_status_info_instantiation() -> None:
 
 def test_status_info_null_exec_time() -> None:
     status = StatusInfo(
-        keyboard_state=KeyboardState.U,
-        screen_formatting=ScreenFormatting.U,
-        field_protection=FieldProtection.U,
-        connection_state=ConnectionState.N,
+        keyboard_state=KeyboardState.Unlocked,
+        screen_formatting=ScreenFormatting.Unformatted,
+        field_protection=FieldProtection.Unprotected,
+        connection_state=ConnectionState.NotConnected,
         host=None,
-        emulator_mode=EmulatorMode.N,
+        emulator_mode=EmulatorMode.NotConnected,
         model_number=2,
         rows=24,
         cols=80,

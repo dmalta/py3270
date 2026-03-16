@@ -84,10 +84,10 @@ def parse_status(line: str) -> StatusInfo | None:
     try:
         conn_raw = parts[3]
         if conn_raw.startswith("C(") and conn_raw.endswith(")"):
-            conn_state = ConnectionState.C
+            conn_state = ConnectionState.Connected
             host: str | None = conn_raw[2:-1]
         elif conn_raw == "N":
-            conn_state = ConnectionState.N
+            conn_state = ConnectionState.NotConnected
             host = None
         else:
             return None
@@ -118,8 +118,8 @@ def parse_status(line: str) -> StatusInfo | None:
 # ---------------------------------------------------------------------------
 
 _HEX = re.compile(r"[0-9a-fA-F]+")
-_PF = re.compile(r"(1[0-9]|2[0-4]|[1-9])(?![0-9])")
-_PA = re.compile(r"[1-3](?![0-9])")
+_PF = re.compile(r"(1\d|2[0-4]|[1-9])(?!\d)")
+_PA = re.compile(r"[1-3](?!\d)")
 
 
 def validate_escape_sequences(text: str) -> None:

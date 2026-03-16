@@ -117,7 +117,7 @@ DISCONNECTED_STATUS = "U U U N N 2 24 80 0 0 0x0 -"
 def test_parse_status_connected() -> None:
     s = parse_status(VALID_STATUS)
     assert s is not None
-    assert s.connection_state == ConnectionState.C
+    assert s.connection_state == ConnectionState.Connected
     assert s.host == "mvshost:23"
     assert s.rows == 24
     assert s.cols == 80
@@ -130,7 +130,7 @@ def test_parse_status_connected() -> None:
 def test_parse_status_disconnected() -> None:
     s = parse_status(DISCONNECTED_STATUS)
     assert s is not None
-    assert s.connection_state == ConnectionState.N
+    assert s.connection_state == ConnectionState.NotConnected
     assert s.host is None
     assert s.command_execution_time is None
 
