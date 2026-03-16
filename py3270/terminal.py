@@ -15,5 +15,5 @@ class Terminal:
     async def stop(self) -> None:
         raise NotImplementedError
 
-    async def exec(self, command: str, timeout: int | None = None) -> TerminalResponse:
+    async def exec(self, command: str) -> TerminalResponse:
         raise NotImplementedError
