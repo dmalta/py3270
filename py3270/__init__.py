@@ -1,5 +1,5 @@
 from py3270.command_queue import CommandQueue
-from py3270.terminal import Terminal
+from py3270.terminal import Terminal, run_sync
 from py3270.types import (
     ConnectionState,
     EmulatorMode,
@@ -39,4 +39,5 @@ __all__ = [
     "TerminalResponse",
     "TerminalSetting",
     "__version__",
+    "run_sync",
 ]
