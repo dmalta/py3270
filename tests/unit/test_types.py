@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import enum
 from dataclasses import fields
 
 import pytest
@@ -66,8 +67,8 @@ def test_terminal_mode_members(member: str) -> None:
         (EmulatorMode, ["I", "L", "C", "P", "N"]),
     ],
 )
-def test_enum_members(enum_cls: type[object], expected: list[str]) -> None:
-    values = [member.value for member in enum_cls]  # type: ignore[attr-defined]
+def test_enum_members(enum_cls: type[enum.Enum], expected: list[str]) -> None:
+    values = [member.value for member in enum_cls]
 
     assert values == expected
 
