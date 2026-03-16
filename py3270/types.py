@@ -54,7 +54,7 @@ class ConnectionState(StrEnum):
 
 
 class EmulatorMode(StrEnum):
-    I = "I"
+    I = "I"  # noqa: E741
     L = "L"
     C = "C"
     P = "P"
