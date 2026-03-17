@@ -26,6 +26,7 @@ from py3270.types import (
     TerminalOptions,
     TerminalResponse,
     TerminalSetting,
+    field,
 )
 
 __version__ = "0.1.0"
@@ -57,4 +58,5 @@ __all__ = [
     "TerminalSetting",
     "UnexpectedScreenError",
     "__version__",
+    "field",
 ]
