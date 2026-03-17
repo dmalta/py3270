@@ -21,6 +21,7 @@ from py3270 import (
     TerminalOptions,
     TerminalResponse,
     TerminalSetting,
+    field,
 )
 
 
@@ -159,22 +160,52 @@ def test_status_info_null_exec_time() -> None:
 
 
 def test_field_definition_trim_default() -> None:
-    field_definition = FieldDefinition(row=3, col=5, length=10, type="string")
+    field_definition = FieldDefinition(row=3, col=5, length=10)
 
+    assert field_definition.type == "string"
     assert field_definition.trim is True
+    assert field_definition.name is None
 
 
 def test_field_definition_number_type() -> None:
-    field_definition = FieldDefinition(row=1, col=1, length=5, type="number", trim=False)
+    field_definition = FieldDefinition(
+        row=1,
+        col=1,
+        length=5,
+        type="number",
+        trim=False,
+        name="amount",
+    )
 
     assert field_definition.type == "number"
     assert field_definition.trim is False
+    assert field_definition.name == "amount"
+
+
+def test_field_helper_defaults() -> None:
+    field_definition = field(2, 12, 8)
+
+    assert field_definition == FieldDefinition(row=2, col=12, length=8)
+
+
+def test_field_helper_supports_named_number_fields() -> None:
+    field_definition = field(5, 20, 10, "number", trim=False, name="balance")
+
+    assert field_definition == FieldDefinition(
+        row=5,
+        col=20,
+        length=10,
+        type="number",
+        trim=False,
+        name="balance",
+    )
 
 
 def test_top_level_exports() -> None:
     assert py3270.TerminalMode is TerminalMode
     assert py3270.TerminalOptions is TerminalOptions
     assert py3270.StatusInfo is StatusInfo
+    assert py3270.field is field
 
 
 def test_version() -> None:
