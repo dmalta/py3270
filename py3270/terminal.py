@@ -28,6 +28,7 @@ from py3270.types import (
 )
 
 _LOG = logging.getLogger(__name__)
+_DEFAULT_MODEL = "3279-2"
 
 
 class Terminal:
@@ -68,6 +69,25 @@ class Terminal:
             return "true" if s.emulator_mode == EmulatorMode.Mode3270 else "false"
         return "false"
 
+    def _to_emulator_coordinate(self, row: int, col: int) -> tuple[int, int]:
+        if row < 1:
+            raise ValueError(f"row must be >= 1, got {row}")
+        if col < 1:
+            raise ValueError(f"col must be >= 1, got {col}")
+        return row - 1, col - 1
+
+    def _to_display_position(self, row: int, col: int) -> ScreenPosition:
+        return ScreenPosition(row + 1, col + 1)
+
+    def _resolved_start_args(self) -> list[str]:
+        args = list(self._options.args)
+        if "-model" in args:
+            return args
+        for index, arg in enumerate(args[:-1]):
+            if arg == "-xrm" and "s3270.model:" in args[index + 1]:
+                return args
+        return ["-model", _DEFAULT_MODEL, *args]
+
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
@@ -86,7 +106,7 @@ class Terminal:
     def start(self) -> None:
         if self.available():
             return
-        self._transport.start(self._options.executable, self._options.args)
+        self._transport.start(self._options.executable, self._resolved_start_args())
         self._state = SessionState.Started
 
     def stop(self) -> None:
@@ -185,7 +205,7 @@ class Terminal:
         if self._last_status_info is None:
             return None
         s = self._last_status_info
-        return ScreenPosition(s.cursor_row, s.cursor_col)
+        return self._to_display_position(s.cursor_row, s.cursor_col)
 
     def screen_size(self) -> ScreenSize | None:
         if self._last_status_info is None:
@@ -231,8 +251,8 @@ class Terminal:
         self, text: str, row: int, col: int, length: int | None = None
     ) -> TerminalResponse:
         if length is not None:
-            text = text[:length].ljust(length)
-        self.command(f"MoveCursor({row},{col})")
+            text = text[:length].rjust(length)
+        self.move(row, col)
         return self.string(text)
 
     def check(self, text: str, row: int, col: int) -> bool:
@@ -243,13 +263,14 @@ class Terminal:
         result: FieldDefinitionRecord = {}
         for field in fields:
             raw = self.read(field.row, field.col, field.length, trim=field.trim)
+            key = field.name or f"{field.row},{field.col}"
             if field.type == "number":
                 try:
-                    result[f"{field.row},{field.col}"] = float(raw) if raw else None
+                    result[key] = float(raw) if raw else None
                 except ValueError:
-                    result[f"{field.row},{field.col}"] = None
+                    result[key] = raw
             else:
-                result[f"{field.row},{field.col}"] = raw
+                result[key] = raw
         return result
 
     # ------------------------------------------------------------------
@@ -289,7 +310,8 @@ class Terminal:
         return self.command(f"PA({n})")
 
     def move(self, row: int, col: int) -> TerminalResponse:
-        return self.command(f"MoveCursor({row},{col})")
+        emulator_row, emulator_col = self._to_emulator_coordinate(row, col)
+        return self.command(f"MoveCursor({emulator_row},{emulator_col})")
 
     def read_screen(self) -> str:
         self.refresh()
