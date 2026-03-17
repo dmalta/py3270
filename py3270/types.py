@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field as dataclass_field
 from enum import StrEnum
 from typing import Literal
 
@@ -73,7 +73,7 @@ class SessionState(StrEnum):
 @dataclass
 class TerminalOptions:
     executable: str = "s3270"
-    args: list[str] = field(default_factory=list)
+    args: list[str] = dataclass_field(default_factory=list)
     verbose: bool = False
     timeout: int = 30_000
 
@@ -120,8 +120,28 @@ class FieldDefinition:
     row: int
     col: int
     length: int
-    type: Literal["string", "number"]
+    type: Literal["string", "number"] = "string"
     trim: bool = True
+    name: str | None = None
+
+
+def field(
+    row: int,
+    col: int,
+    length: int,
+    type: Literal["string", "number"] = "string",
+    *,
+    trim: bool = True,
+    name: str | None = None,
+) -> FieldDefinition:
+    return FieldDefinition(
+        row=row,
+        col=col,
+        length=length,
+        type=type,
+        trim=trim,
+        name=name,
+    )
 
 
 FieldDefinitionRecord = dict[str, str | float | None]
@@ -143,4 +163,5 @@ __all__ = [
     "TerminalOptions",
     "TerminalResponse",
     "TerminalSetting",
+    "field",
 ]
