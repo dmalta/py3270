@@ -11,6 +11,8 @@ import pytest
 
 from py3270 import SessionBusyError, SessionProcessError, SessionState, SessionTimeoutError, Terminal
 from py3270 import transport as transport_module
+from py3270 import field
+from py3270.types import TerminalOptions
 from py3270.types import (
     ConnectionState,
     EmulatorMode,
@@ -122,6 +124,10 @@ def test_start_and_stop() -> None:
         assert terminal.available() is False
         assert terminal.state == SessionState.Stopped
 
+        command = popen.call_args.args[0]
+        assert command[:3] == ["s3270", "-script", "-model"]
+        assert command[3] == "3279-2"
+
 
 def test_start_is_idempotent() -> None:
     proc = _MockProcess()
@@ -130,6 +136,32 @@ def test_start_is_idempotent() -> None:
         terminal.start()
         terminal.start()
         assert popen.call_count == 1
+        terminal.stop()
+
+
+def test_start_preserves_explicit_model_arg() -> None:
+    proc = _MockProcess()
+    options = TerminalOptions(args=["-model", "3279-4"])
+    with patch("subprocess.Popen", return_value=proc) as popen:
+        terminal = Terminal(options)
+        terminal.start()
+
+        command = popen.call_args.args[0]
+        assert command == ["s3270", "-script", "-model", "3279-4"]
+
+        terminal.stop()
+
+
+def test_start_preserves_explicit_xrm_model() -> None:
+    proc = _MockProcess()
+    options = TerminalOptions(args=["-xrm", "s3270.model: 3278-5"])
+    with patch("subprocess.Popen", return_value=proc) as popen:
+        terminal = Terminal(options)
+        terminal.start()
+
+        command = popen.call_args.args[0]
+        assert command == ["s3270", "-script", "-xrm", "s3270.model: 3278-5"]
+
         terminal.stop()
 
 
@@ -211,6 +243,20 @@ def test_read_check_and_screen_helpers() -> None:
     assert t.get_screen_buffer() == ["HELLO WORLD     ", "SECOND          "]
 
 
+def test_read_stops_at_end_of_row_without_wrapping() -> None:
+    t = Terminal()
+    first_row = "".join(str(i % 10) for i in range(80))
+    second_row = "X" * 80
+    t._screen_buffer = [first_row, second_row]
+
+    # Request past the row boundary and ensure read() does not continue into next row.
+    result = t.read(1, 60, 80, trim=False)
+
+    assert first_row.endswith(result)
+    assert len(result) == 21
+    assert "X" not in result
+
+
 def test_read_many_parses_number_field() -> None:
     t = Terminal()
 
@@ -230,13 +276,52 @@ def test_read_many_parses_number_field() -> None:
     assert result["1,5"] == pytest.approx(123.5)
 
 
+def test_read_many_uses_name_when_present() -> None:
+    t = Terminal()
+
+    def fake_refresh() -> TerminalResponse:
+        t._screen_buffer = ["USER123   456.7"]
+        return _ok("USER123   456.7")
+
+    t.refresh = fake_refresh  # type: ignore[method-assign]
+
+    result = t.read_many(
+        [
+            field(1, 1, 7, name="user_id"),
+            field(1, 11, 5, "number", name="amount"),
+        ]
+    )
+
+    assert result == {"user_id": "USER123", "amount": pytest.approx(456.7)}
+
+
+def test_read_many_mixes_named_and_positional_keys() -> None:
+    t = Terminal()
+
+    def fake_refresh() -> TerminalResponse:
+        t._screen_buffer = ["ABC    999 "]
+        return _ok("ABC    999 ")
+
+    t.refresh = fake_refresh  # type: ignore[method-assign]
+
+    result = t.read_many(
+        [
+            field(1, 1, 3, name="code"),
+            field(1, 8, 3, "number"),
+        ]
+    )
+
+    assert result["code"] == "ABC"
+    assert result["1,8"] == pytest.approx(999.0)
+
+
 def test_write_sends_move_then_string(running_terminal: Terminal) -> None:
     _inject_response(running_terminal, _ok())
     _inject_response(running_terminal, _ok())
     running_terminal.write("HELLOWORLD", 3, 5, length=5)
 
     process = cast(_MockProcess, running_terminal._transport._process)
-    assert process.stdin.writes[-2:] == ["MoveCursor(3,5)\n", "String(HELLO)\n"]
+    assert process.stdin.writes[-2:] == ["MoveCursor(2,4)\n", "String(HELLO)\n"]
 
 
 def test_pf_and_pa_ranges(running_terminal: Terminal) -> None:
@@ -290,11 +375,24 @@ def test_status_getters() -> None:
         command_execution_time=None,
     )
 
-    assert t.cursor() == ScreenPosition(5, 10)
+    assert t.cursor() == ScreenPosition(6, 11)
     assert t.screen_size() == ScreenSize(24, 80)
     assert t.is_(StatusFlag.Formatted) is True
     assert t.is_(StatusFlag.KeyboardLock) is True
-    assert t.current_field() == ScreenPosition(5, 10)
+    assert t.current_field() == ScreenPosition(6, 11)
+
+
+def test_move_uses_display_coordinates(running_terminal: Terminal) -> None:
+    _inject_response(running_terminal, _ok())
+    running_terminal.move(2, 3)
+
+    process = cast(_MockProcess, running_terminal._transport._process)
+    assert process.stdin.writes[-1] == "MoveCursor(1,2)\n"
+
+
+def test_move_rejects_non_display_coordinates(running_terminal: Terminal) -> None:
+    with pytest.raises(ValueError, match=">= 1"):
+        running_terminal.move(0, 1)
 
 
 def test_run_workflow(running_terminal: Terminal) -> None:
