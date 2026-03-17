@@ -1,15 +1,20 @@
 from __future__ import annotations
 
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+import queue
+import threading
+import time
+from collections.abc import Generator
+from typing import cast
+from unittest.mock import patch
 
 import pytest
 
-from py3270 import Terminal
-from py3270.terminal import run_sync
+from py3270 import SessionBusyError, SessionProcessError, SessionState, SessionTimeoutError, Terminal
+from py3270 import transport as transport_module
 from py3270.types import (
     ConnectionState,
     EmulatorMode,
+    FieldDefinition,
     FieldProtection,
     KeyboardState,
     ScreenFormatting,
@@ -22,171 +27,259 @@ from py3270.types import (
 )
 
 
-# ---------------------------------------------------------------------------
-# Helpers & fixtures
-# ---------------------------------------------------------------------------
+class _MockStdin:
+    def __init__(self) -> None:
+        self.writes: list[str] = []
+
+    def write(self, text: str) -> None:
+        self.writes.append(text)
+
+    def flush(self) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
 
 
-def make_mock_process() -> MagicMock:
-    """Return a mock subprocess whose stdout blocks forever (never produces EOF).
+class _BlockingStdout:
+    def __init__(self) -> None:
+        self._lines: queue.Queue[str | None] = queue.Queue()
 
-    Tests inject responses directly via inject_response() which calls
-    handle_response() on the CommandQueue, bypassing the read loop entirely.
-    Blocking stdout prevents _read_loop from stopping the queue prematurely.
-    """
-    proc = MagicMock()
-    proc.stdin = AsyncMock()
-    proc.stdin.write = MagicMock()
-    proc.stdin.drain = AsyncMock()
-    proc.stdin.close = MagicMock()
-    proc.stdout = AsyncMock()
+    def readline(self) -> str:
+        line = self._lines.get()
+        if line is None:
+            return ""
+        return line
 
-    async def _blocking_read(n: int) -> bytes:  # pragma: no cover
-        await asyncio.sleep(9_999)
-        return b""
+    def close_with_eof(self) -> None:
+        self._lines.put(None)
 
-    proc.stdout.read = _blocking_read
-    proc.terminate = MagicMock()
-    proc.wait = AsyncMock(return_value=0)
-    proc.returncode = None
-    return proc
+
+class _MockProcess:
+    def __init__(self) -> None:
+        self.stdin = _MockStdin()
+        self.stdout = _BlockingStdout()
+        self.pid = 1234
+        self._alive = True
+
+    def poll(self) -> int | None:
+        return None if self._alive else 0
+
+    def terminate(self) -> None:
+        self._alive = False
+        self.stdout.close_with_eof()
+
+    def wait(self, timeout: float | None = None) -> int:
+        self._alive = False
+        return 0
+
+    def kill(self) -> None:
+        self.terminate()
 
 
 @pytest.fixture
-def mock_process() -> MagicMock:
-    return make_mock_process()
+def running_terminal() -> Generator[Terminal, None, None]:
+    proc = _MockProcess()
+    with patch("subprocess.Popen", return_value=proc):
+        terminal = Terminal()
+        terminal.start()
+        try:
+            yield terminal
+        finally:
+            terminal.stop()
 
 
-@pytest.fixture
-async def running_terminal(mock_process: MagicMock):
-    """Terminal with a mocked process; inject responses via inject_response()."""
-    with patch("asyncio.create_subprocess_exec", return_value=mock_process):
-        t = Terminal()
-        await t.start()
-        yield t
-        await t.stop()
-
-
-def inject_response(terminal: Terminal, response: TerminalResponse) -> None:
-    """Simulate a response arriving from s3270 stdout by resolving the in-flight future."""
-    assert terminal._command_queue is not None
-    terminal._command_queue.handle_response(response)
+def _inject_response(terminal: Terminal, response: TerminalResponse) -> None:
+    lines = response.raw[:-1] if response.raw else []
+    terminal_line = "ok" if response.ok else f"error {response.data}"
+    line_queue = terminal._transport._line_queue
+    for line in lines:
+        line_queue.put(line)
+    line_queue.put(terminal_line)
 
 
 def _ok(data: str = "", status: str = "") -> TerminalResponse:
-    return TerminalResponse(ok=True, data=data, status=status, raw=[])
+    effective_status = status or "U F U N I 2 24 80 0 0 0x0 -"
+    raw: list[str] = []
+    if data:
+        raw.extend([f"data: {line}" for line in data.splitlines()])
+    raw.append(effective_status)
+    raw.append("ok")
+    return TerminalResponse(ok=True, data=data, status=effective_status, raw=raw)
 
 
-# ---------------------------------------------------------------------------
-# T10: Lifecycle tests
-# ---------------------------------------------------------------------------
+def test_start_and_stop() -> None:
+    proc = _MockProcess()
+    with patch("subprocess.Popen", return_value=proc) as popen:
+        terminal = Terminal()
+        terminal.start()
+
+        assert popen.call_count == 1
+        assert terminal.available() is True
+        assert terminal.state == SessionState.Started
+
+        terminal.stop()
+        assert terminal.available() is False
+        assert terminal.state == SessionState.Stopped
 
 
-async def test_start_spawns_process(mock_process: MagicMock) -> None:
-    with patch("asyncio.create_subprocess_exec", return_value=mock_process) as mock_exec:
-        t = Terminal()
-        await t.start()
-        mock_exec.assert_called_once()
-        assert mock_exec.call_args.args[0] == "s3270"
-        assert t.available() is True
-        await t.stop()
+def test_start_is_idempotent() -> None:
+    proc = _MockProcess()
+    with patch("subprocess.Popen", return_value=proc) as popen:
+        terminal = Terminal()
+        terminal.start()
+        terminal.start()
+        assert popen.call_count == 1
+        terminal.stop()
 
 
-async def test_start_is_idempotent(mock_process: MagicMock) -> None:
-    with patch("asyncio.create_subprocess_exec", return_value=mock_process) as mock_exec:
-        t = Terminal()
-        await t.start()
-        await t.start()  # second call — no-op
-        assert mock_exec.call_count == 1
-        await t.stop()
+def test_command_before_start_raises() -> None:
+    terminal = Terminal()
+    with pytest.raises(Exception, match="not running"):
+        terminal.command("Query(Host)")
 
 
-async def test_stop_clears_process(mock_process: MagicMock) -> None:
-    with patch("asyncio.create_subprocess_exec", return_value=mock_process):
-        t = Terminal()
-        await t.start()
-        await t.stop()
-        assert t.available() is False
+def test_command_round_trip(running_terminal: Terminal) -> None:
+    _inject_response(running_terminal, _ok("mvshost", "U F U N I 2 24 80 0 0 0x0 -"))
+    result = running_terminal.command("Query(Host)")
 
-
-async def test_stop_on_unstarted_terminal() -> None:
-    t = Terminal()
-    await t.stop()  # should not raise
-
-
-def test_available_false_before_start() -> None:
-    t = Terminal()
-    assert t.available() is False
-
-
-async def test_command_before_start_raises() -> None:
-    t = Terminal()
-    with pytest.raises(RuntimeError, match="not running"):
-        await t.command("Query(Host)")
-
-
-# ---------------------------------------------------------------------------
-# T11: Command and query tests
-# ---------------------------------------------------------------------------
-
-
-async def test_command_sends_to_queue(running_terminal: Terminal) -> None:
-    task = asyncio.create_task(running_terminal.command("Query(Host)"))
-    await asyncio.sleep(0)
-    await asyncio.sleep(0)
-    inject_response(
-        running_terminal,
-        TerminalResponse(
-            ok=True,
-            data="mvshost",
-            status="U F U N I 2 24 80 0 0 0x0 -",
-            raw=[],
-        ),
-    )
-    result = await task
     assert result.ok is True
     assert result.data == "mvshost"
+    process = cast(_MockProcess, running_terminal._transport._process)
+    assert process.stdin.writes[-1] == "Query(Host)\n"
 
 
-async def test_command_with_custom_timeout(mock_process: MagicMock) -> None:
-    with patch("asyncio.create_subprocess_exec", return_value=mock_process):
-        t = Terminal()
-        await t.start()
+def test_timeout_raises_session_timeout(running_terminal: Terminal) -> None:
+    with pytest.raises(SessionTimeoutError):
+        running_terminal.command("SlowCmd", timeout=25)
+
+
+def test_process_death_raises_session_process_error(running_terminal: Terminal) -> None:
+    running_terminal._transport._line_queue.put(transport_module._EOF)
+    with pytest.raises(SessionProcessError):
+        running_terminal.command("Query(Host)")
+
+
+def test_one_in_flight_busy_error(running_terminal: Terminal) -> None:
+    errors: list[Exception] = []
+
+    def first_call() -> None:
         try:
-            with pytest.raises(TimeoutError):
-                await t.command("SlowCmd", timeout=50)  # no response → times out
-        finally:
-            await t.stop()
+            running_terminal.command("Query(Host)", timeout=1000)
+        except Exception as exc:  # pragma: no cover
+            errors.append(exc)
+
+    t = threading.Thread(target=first_call)
+    t.start()
+    time.sleep(0.05)
+
+    with pytest.raises(SessionBusyError):
+        running_terminal.command("Query(Host)")
+
+    _inject_response(running_terminal, _ok("mvshost", "U F U N I 2 24 80 0 0 0x0 -"))
+    t.join(timeout=1)
+    assert not errors
 
 
-def test_is_keyboard_lock_truthy_for_non_false() -> None:
+def test_connect_disconnect_state_transitions(running_terminal: Terminal) -> None:
+    _inject_response(running_terminal, _ok(status="U F U C(mvshost:23) I 2 24 80 0 0 0x0 -"))
+    response = running_terminal.connect("mvshost", 23)
+    assert response.ok is True
+    assert running_terminal.state == SessionState.Connected
+
+    _inject_response(running_terminal, _ok(status="U F U N N 2 24 80 0 0 0x0 -"))
+    response = running_terminal.disconnect()
+    assert response.ok is True
+    assert running_terminal.state == SessionState.Disconnected
+
+
+def test_connect_builds_mode_and_lu(running_terminal: Terminal) -> None:
+    _inject_response(running_terminal, _ok(status="U F U C(S:LU001@mvshost:23) I 2 24 80 0 0 0x0 -"))
+    running_terminal.connect("mvshost", 23, mode=TerminalMode.SuppressExtendedDS, lu_name="LU001")
+
+    process = cast(_MockProcess, running_terminal._transport._process)
+    assert process.stdin.writes[-1] == "Connect(S:LU001@mvshost:23)\n"
+
+
+def test_read_check_and_screen_helpers() -> None:
+    t = Terminal()
+    t._screen_buffer = ["HELLO WORLD     ", "SECOND          "]
+
+    assert t.read(1, 1, 5) == "HELLO"
+    assert t.check("WORLD", 1, 7) is True
+    assert t.screen() == "HELLO WORLD     \nSECOND          "
+    assert t.get_screen_buffer() == ["HELLO WORLD     ", "SECOND          "]
+
+
+def test_read_many_parses_number_field() -> None:
+    t = Terminal()
+
+    def fake_refresh() -> TerminalResponse:
+        t._screen_buffer = ["VAL 123.5"]
+        return _ok("VAL 123.5")
+
+    t.refresh = fake_refresh  # type: ignore[method-assign]
+
+    fields = [
+        FieldDefinition(row=1, col=1, length=3, type="string"),
+        FieldDefinition(row=1, col=5, length=5, type="number"),
+    ]
+    result = t.read_many(fields)
+
+    assert result["1,1"] == "VAL"
+    assert result["1,5"] == pytest.approx(123.5)
+
+
+def test_write_sends_move_then_string(running_terminal: Terminal) -> None:
+    _inject_response(running_terminal, _ok())
+    _inject_response(running_terminal, _ok())
+    running_terminal.write("HELLOWORLD", 3, 5, length=5)
+
+    process = cast(_MockProcess, running_terminal._transport._process)
+    assert process.stdin.writes[-2:] == ["MoveCursor(3,5)\n", "String(HELLO)\n"]
+
+
+def test_pf_and_pa_ranges(running_terminal: Terminal) -> None:
+    _inject_response(running_terminal, _ok())
+    running_terminal.pf(1)
+
+    _inject_response(running_terminal, _ok())
+    running_terminal.pa(3)
+
+    with pytest.raises(ValueError, match="PF"):
+        running_terminal.pf(0)
+
+    with pytest.raises(ValueError, match="PA"):
+        running_terminal.pa(4)
+
+
+def test_wait_for_modes() -> None:
+    t = Terminal()
+    t._screen_buffer = ["READY NOW"]
+
+    def fake_refresh() -> TerminalResponse:
+        return _ok("READY NOW")
+
+    t.refresh = fake_refresh  # type: ignore[method-assign]
+
+    assert t.wait_for("READY", timeout=100) is True
+    assert t.wait_for("READY", row=1, col=1, timeout=100) is True
+
+
+def test_wait_for_invalid_coordinates() -> None:
+    t = Terminal()
+    with pytest.raises(ValueError, match="both row and col"):
+        t.wait_for("X", row=1)
+
+
+def test_status_getters() -> None:
     t = Terminal()
     t._last_status_info = StatusInfo(
         keyboard_state=KeyboardState.Locked,
         screen_formatting=ScreenFormatting.Formatted,
         field_protection=FieldProtection.Unprotected,
-        connection_state=ConnectionState.NotConnected,
-        host=None,
-        emulator_mode=EmulatorMode.NotConnected,
-        model_number=2,
-        rows=24,
-        cols=80,
-        cursor_row=0,
-        cursor_col=0,
-        window_id="0x0",
-        command_execution_time=None,
-    )
-    assert t.is_(StatusFlag.KeyboardLock) is True
-
-
-def test_cursor_returns_position() -> None:
-    t = Terminal()
-    t._last_status_info = StatusInfo(
-        keyboard_state=KeyboardState.Unlocked,
-        screen_formatting=ScreenFormatting.Formatted,
-        field_protection=FieldProtection.Unprotected,
         connection_state=ConnectionState.Connected,
-        host="h",
+        host="mvshost",
         emulator_mode=EmulatorMode.Mode3270,
         model_number=2,
         rows=24,
@@ -196,279 +289,51 @@ def test_cursor_returns_position() -> None:
         window_id="0x0",
         command_execution_time=None,
     )
+
     assert t.cursor() == ScreenPosition(5, 10)
-
-
-def test_screen_size() -> None:
-    t = Terminal()
-    t._last_status_info = StatusInfo(
-        keyboard_state=KeyboardState.Unlocked,
-        screen_formatting=ScreenFormatting.Formatted,
-        field_protection=FieldProtection.Unprotected,
-        connection_state=ConnectionState.NotConnected,
-        host=None,
-        emulator_mode=EmulatorMode.NotConnected,
-        model_number=2,
-        rows=24,
-        cols=80,
-        cursor_row=0,
-        cursor_col=0,
-        window_id="0x0",
-        command_execution_time=None,
-    )
     assert t.screen_size() == ScreenSize(24, 80)
+    assert t.is_(StatusFlag.Formatted) is True
+    assert t.is_(StatusFlag.KeyboardLock) is True
+    assert t.current_field() == ScreenPosition(5, 10)
 
 
-# ---------------------------------------------------------------------------
-# T12: Connectivity tests
-# ---------------------------------------------------------------------------
+def test_run_workflow(running_terminal: Terminal) -> None:
+    _inject_response(running_terminal, _ok("a"))
+    _inject_response(running_terminal, _ok("b"))
+    responses = running_terminal.run_workflow(["Query(A)", "Query(B)"])
 
+    assert [response.data for response in responses] == ["a", "b"]
 
-async def test_connect_builds_simple_address(running_terminal: Terminal) -> None:
-    task = asyncio.create_task(running_terminal.connect("mvshost", 23))
-    await asyncio.sleep(0)
-    await asyncio.sleep(0)
-    inject_response(
-        running_terminal,
-        _ok(status="U F U C(mvshost:23) I 2 24 80 0 0 0x0 -"),
-    )
-    result = await task
-    assert result.ok is True
-    assert running_terminal._connected is True
 
+def test_multi_session_parallel_safety() -> None:
+    proc1 = _MockProcess()
+    proc2 = _MockProcess()
 
-async def test_connect_with_mode_and_lu(running_terminal: Terminal) -> None:
-    task = asyncio.create_task(
-        running_terminal.connect(
-            "mvshost", 23, mode=TerminalMode.SuppressExtendedDS, lu_name="LU001"
-        )
-    )
-    await asyncio.sleep(0)
-    await asyncio.sleep(0)
-    inject_response(
-        running_terminal,
-        _ok(status="U F U C(S:LU001@mvshost:23) I 2 24 80 0 0 0x0 -"),
-    )
-    await task
-    assert running_terminal._connected is True
+    with patch("subprocess.Popen", side_effect=[proc1, proc2]):
+        t1 = Terminal(session_id="s1")
+        t2 = Terminal(session_id="s2")
+        t1.start()
+        t2.start()
 
+        result_queue: queue.Queue[tuple[str, str]] = queue.Queue()
 
-async def test_disconnect_when_not_connected() -> None:
-    t = Terminal()
-    t._connected = False
-    result = await t.disconnect()
-    assert result.ok is True  # synthetic response, no command sent
+        def run_cmd(label: str, terminal: Terminal) -> None:
+            response = terminal.command("Query(Host)")
+            result_queue.put((label, response.data))
 
+        th1 = threading.Thread(target=run_cmd, args=("s1", t1))
+        th2 = threading.Thread(target=run_cmd, args=("s2", t2))
+        th1.start()
+        th2.start()
 
-async def test_disconnect_when_connected(running_terminal: Terminal) -> None:
-    running_terminal._connected = True
-    task = asyncio.create_task(running_terminal.disconnect())
-    await asyncio.sleep(0)
-    await asyncio.sleep(0)
-    inject_response(running_terminal, _ok(status="U F U N N 2 24 80 0 0 0x0 -"))
-    result = await task
-    assert result.ok is True
-    assert running_terminal._connected is False
+        _inject_response(t1, _ok("host1", "U F U N I 2 24 80 0 0 0x0 -"))
+        _inject_response(t2, _ok("host2", "U F U N I 2 24 80 0 0 0x0 -"))
 
+        th1.join(timeout=1)
+        th2.join(timeout=1)
 
-# ---------------------------------------------------------------------------
-# T13: Screen / read / write / check tests
-# ---------------------------------------------------------------------------
+        outcomes = sorted([result_queue.get(timeout=1), result_queue.get(timeout=1)])
+        assert outcomes == [("s1", "host1"), ("s2", "host2")]
 
-
-def test_read_basic() -> None:
-    t = Terminal()
-    t._screen_buffer = ["HELLO WORLD         ", "SECOND LINE         "]
-    assert t.read(1, 1, 5) == "HELLO"
-    assert t.read(1, 7, 5) == "WORLD"
-
-
-def test_read_trims_by_default() -> None:
-    t = Terminal()
-    t._screen_buffer = ["HELLO     "]
-    assert t.read(1, 1, 10) == "HELLO"
-
-
-def test_read_no_trim() -> None:
-    t = Terminal()
-    t._screen_buffer = ["HELLO     "]
-    assert t.read(1, 1, 10, trim=False) == "HELLO     "
-
-
-def test_read_out_of_bounds_row() -> None:
-    t = Terminal()
-    t._screen_buffer = ["LINE1"]
-    assert t.read(5, 1, 5) == ""
-
-
-def test_read_row_zero_returns_empty() -> None:
-    t = Terminal()
-    t._screen_buffer = ["LINE1"]
-    assert t.read(0, 1, 5) == ""
-
-
-def test_check_true() -> None:
-    t = Terminal()
-    t._screen_buffer = ["READY               "]
-    assert t.check("READY", 1, 1) is True
-
-
-def test_check_false() -> None:
-    t = Terminal()
-    t._screen_buffer = ["BUSY                "]
-    assert t.check("READY", 1, 1) is False
-
-
-def test_screen_join() -> None:
-    t = Terminal()
-    t._screen_buffer = ["LINE1", "LINE2"]
-    assert t.screen() == "LINE1\nLINE2"
-
-
-def test_get_screen_buffer_returns_copy() -> None:
-    t = Terminal()
-    t._screen_buffer = ["A", "B"]
-    buf = t.get_screen_buffer()
-    buf.append("C")
-    assert len(t._screen_buffer) == 2  # original not modified
-
-
-async def test_write_truncates_to_length(running_terminal: Terminal) -> None:
-    results: list[str] = []
-
-    async def capture_command(cmd: str, **kw: object) -> TerminalResponse:
-        results.append(cmd)
-        inject_response(running_terminal, _ok())
-        return _ok()
-
-    running_terminal.command = capture_command  # type: ignore[method-assign]
-    await running_terminal.write("HELLOWORLD", 3, 5, length=5)
-    assert any("HELLO" in r for r in results)
-
-
-# ---------------------------------------------------------------------------
-# T14: Text / input helper tests
-# ---------------------------------------------------------------------------
-
-
-async def test_pf_valid(running_terminal: Terminal) -> None:
-    for n in [1, 12, 24]:
-        task = asyncio.create_task(running_terminal.pf(n))
-        await asyncio.sleep(0)
-        await asyncio.sleep(0)
-        inject_response(running_terminal, _ok())
-        await task
-
-
-async def test_pf_out_of_range() -> None:
-    t = Terminal()
-    with pytest.raises(ValueError, match="PF"):
-        await t.pf(0)
-    with pytest.raises(ValueError, match="PF"):
-        await t.pf(25)
-
-
-async def test_pa_valid(running_terminal: Terminal) -> None:
-    for n in [1, 2, 3]:
-        task = asyncio.create_task(running_terminal.pa(n))
-        await asyncio.sleep(0)
-        await asyncio.sleep(0)
-        inject_response(running_terminal, _ok())
-        await task
-
-
-async def test_pa_out_of_range() -> None:
-    t = Terminal()
-    with pytest.raises(ValueError, match="PA"):
-        await t.pa(0)
-    with pytest.raises(ValueError, match="PA"):
-        await t.pa(4)
-
-
-async def test_string_validates_escape() -> None:
-    t = Terminal()
-    with pytest.raises(ValueError):
-        await t.string(r"\z invalid")
-
-
-# ---------------------------------------------------------------------------
-# T15: Wait helper tests
-# ---------------------------------------------------------------------------
-
-
-async def test_wait_for_global_mode_found(running_terminal: Terminal) -> None:
-    running_terminal._screen_buffer = ["READY TO PROCEED"]
-
-    async def noop_refresh() -> TerminalResponse:
-        return _ok(data="READY TO PROCEED")
-
-    running_terminal.refresh = noop_refresh  # type: ignore[method-assign]
-    result = await running_terminal.wait_for("READY", timeout=1000)
-    assert result is True
-
-
-async def test_wait_for_positional_mode_found(running_terminal: Terminal) -> None:
-    running_terminal._screen_buffer = ["HELLO WORLD         "]
-
-    async def noop_refresh() -> TerminalResponse:
-        return _ok()
-
-    running_terminal.refresh = noop_refresh  # type: ignore[method-assign]
-    result = await running_terminal.wait_for("HELLO", row=1, col=1, timeout=500)
-    assert result is True
-
-
-async def test_wait_for_timeout_returns_false(running_terminal: Terminal) -> None:
-    running_terminal._screen_buffer = ["NOTHING HERE"]
-
-    async def noop_refresh() -> TerminalResponse:
-        return _ok()
-
-    running_terminal.refresh = noop_refresh  # type: ignore[method-assign]
-    result = await running_terminal.wait_for("XYZZY", timeout=150)
-    assert result is False
-
-
-async def test_wait_for_partial_row_col_raises() -> None:
-    t = Terminal()
-    with pytest.raises(ValueError, match="both"):
-        await t.wait_for("text", row=3)  # col missing
-    with pytest.raises(ValueError, match="both"):
-        await t.wait_for("text", col=5)  # row missing
-
-
-async def test_wait_for_timeout_clamped() -> None:
-    """Negative timeout clamped to 0 — returns False immediately."""
-    t = Terminal()
-    t._screen_buffer = []
-
-    async def noop(*a: object, **kw: object) -> TerminalResponse:
-        return _ok()
-
-    t.refresh = noop  # type: ignore[method-assign]
-    result = await t.wait_for("X", timeout=-1000)
-    assert result is False
-
-
-# ---------------------------------------------------------------------------
-# T16: run_sync tests
-# ---------------------------------------------------------------------------
-
-
-def test_run_sync_executes_coroutine() -> None:
-    async def sample() -> int:
-        return 42
-
-    result = run_sync(sample)
-    assert result == 42
-
-
-def test_run_sync_raises_in_running_loop() -> None:
-    async def inner() -> None:
-        async def dummy() -> None:
-            pass
-
-        with pytest.raises(RuntimeError, match="running event loop"):
-            run_sync(dummy)
-
-    asyncio.run(inner())
+        t1.stop()
+        t2.stop()

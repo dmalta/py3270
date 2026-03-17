@@ -57,9 +57,9 @@ There is currently no Python equivalent. The Python ecosystem is widely used for
 
 ### ✅ In Scope (V1 -- MVP)
 
-- Full implementation of `Terminal` and `CommandQueue` classes with behavioral parity to the TypeScript reference.
-- Python package structure: `types.py`, `command_queue.py`, `terminal.py`, `__init__.py`.
-- Both **async** (`asyncio`) and **sync** (`threading`) concurrency model options -- the chosen model must preserve all queue invariants.
+- Full implementation of `Terminal` and `Transport` classes with behavioral parity to the TypeScript reference.
+- Python package structure: `types.py`, `transport.py`, `terminal.py`, `errors.py`, `session_manager.py`, `__init__.py`.
+- A synchronous per-session execution model with external orchestration for cross-session concurrency.
 - Process lifecycle: `start()`, `stop()`.
 - Connectivity: `connect()`, `disconnect()`.
 - Command execution: `command()` (with per-command timeout).
@@ -97,25 +97,27 @@ There is currently no Python equivalent. The Python ecosystem is widely used for
 
 ### Architecture Overview
 
-The library mirrors the TypeScript two-component model:
+The library uses a synchronous session core with focused components:
 
 Component      | Responsibility
 -------------- | ------------------------------------------------------------------------------------------
-`CommandQueue` | Serializes commands: one in-flight at a time, per-command timeout, clean stop/drain logic.
-`Terminal`     | Wraps the `s3270` subprocess, parses stdout, exposes the full public API.
-`types` module | All enums, dataclasses, and type aliases (no behavior).
-`__init__`     | Re-exports the public surface.
+`Transport`      | Owns the `s3270` subprocess, stdout reader thread, response framing, one-in-flight execution, and timeout handling.
+`Terminal`       | Exposes the session API, parses status lines, tracks session state, and delegates low-level I/O to `Transport`.
+`SessionManager` | Manages multiple isolated `Terminal` sessions for cross-session orchestration.
+`types` module   | All enums, dataclasses, and type aliases (no behavior).
+`errors` module  | Session-level exceptions for timeout, busy, disconnect, and process-failure cases.
+`__init__`       | Re-exports the public surface.
 
 **Architecture Diagram**:
 
 ```mermaid
 graph TD
     Caller -->|"start / connect / command / read / ..."| Terminal
-    Terminal -->|"enqueue(cmd)"| CommandQueue
-    CommandQueue -->|"stdin write"| s3270_Process["s3270 process\n(-script mode)"]
-    s3270_Process -->|"stdout chunks"| Terminal
-    Terminal -->|"handleOutput → processResponse"| CommandQueue
-    CommandQueue -->|"resolve / reject"| Terminal
+  SessionManager -->|"create / get / close"| Terminal
+  Terminal -->|"execute(cmd)"| Transport
+  Transport -->|"stdin write"| s3270_Process["s3270 process\n(-script mode)"]
+  s3270_Process -->|"stdout lines"| Transport
+  Transport -->|"TerminalResponse"| Terminal
     Terminal -->|"TerminalResponse"| Caller
 ```
 
@@ -124,8 +126,10 @@ graph TD
 ```
 py3270/
 ├── __init__.py          # Public re-exports
+├── errors.py            # Session-level exception types
+├── session_manager.py   # Multi-session orchestration
+├── transport.py         # Low-level process transport and command execution
 ├── types.py             # Enums, dataclasses, type aliases
-├── command_queue.py     # CommandQueue implementation
 └── terminal.py          # Terminal class (subprocess + API)
 ```
 
@@ -145,7 +149,7 @@ py3270/
 
 - Mapped to `TerminalResponse`: `ok`, `data` (data lines joined by `\n`), `status`, `raw`.
 
-**One-in-flight guarantee**: Only one command may be written to stdin at a time. The `CommandQueue` enforces this by holding subsequent commands until the active one yields a response or errors/times out.
+**One-in-flight guarantee**: Only one command may be written to stdin at a time per session. `Transport` enforces this with a non-blocking lock and raises a busy error if a second command is attempted while one is active.
 
 ### Data Model
 
@@ -188,35 +192,37 @@ Enum               | Values
 - `FieldDefinition`: `row, col, length, type` (`"string"` | `"number"`), `trim` (`bool`)
 - `FieldDefinitionRecord`: `dict[str, str | float | None]`
 
-### CommandQueue Design
+### Transport Design
 
-State field   | Description
-------------- | -------------------------------------------------------
-`_queue`      | Ordered list of pending `TerminalCommand` items.
-`_current`    | The currently in-flight command (or `None`).
-`_processing` | Guard flag preventing concurrent `_process_next` entry.
-`_stopped`    | Set on `stop()`; all new enqueue attempts are rejected.
+State field      | Description
+---------------- | -------------------------------------------------------
+`_process`       | Active `subprocess.Popen` handle, or `None`.
+`_line_queue`    | Queue of stdout lines emitted by the reader thread.
+`_reader`        | Background stdout reader thread.
+`_inflight_lock` | Guard ensuring exactly one command is active per session.
+`_stopped`       | Set on `stop()`; all new execute attempts are rejected.
 
 Key behavioral contracts:
 
-- `enqueue()` rejects immediately if `_stopped`.
-- `_process_next()` pops one command, starts its timeout timer, writes to stdin via injected `send_command` callback.
-- If the send fails: clear timeout, reject, advance to next.
-- Timeout fires: reject with `"Command timeout: <cmd>"`, advance.
-- `handle_response()` / `handle_error()`: clear timeout, resolve or reject current, advance.
-- `stop()`: mark stopped, reject current with `"Queue stopped"`, drain remaining with `"Process terminated"`.
+- `execute()` rejects immediately if `_stopped`.
+- `execute()` acquires `_inflight_lock`; if acquisition fails it raises `SessionBusyError`.
+- `_send_raw()` writes the command to stdin and flushes it immediately.
+- `_read_response()` collects stdout lines until a terminal line (`ok` or `error...`) is observed.
+- EOF from the reader thread raises `SessionProcessError`.
+- Timeout raises `SessionTimeoutError`.
+- `stop()` terminates the process, joins the reader thread, and clears availability.
 
 ### Terminal Internal State
 
 Field            | Description
 ---------------- | -------------------------------------
-`_process`       | Subprocess handle or `None`.
-`_buffer`        | Accumulated stdout string.
-`_command_queue` | `CommandQueue` instance.
-`_options`       | Resolved `TerminalOptions`.
-`_connected`     | Boolean connection flag.
-`_screen_buffer` | `list[str]` -- last refreshed screen.
-`_last_status`   | Raw last status-line string.
+`_transport`        | `Transport` instance for this session.
+`_options`          | Resolved `TerminalOptions`.
+`_connected`        | Boolean connection flag.
+`_screen_buffer`    | `list[str]` -- last refreshed screen.
+`_last_status_info` | Parsed last status line.
+`_state`            | `SessionState` lifecycle value.
+`_session_id`       | Stable identifier for this session.
 
 ### Connection String Construction
 
@@ -310,10 +316,10 @@ Two viable Python concurrency options:
 
 Option                 | Description                                                                                        | Trade-offs
 ---------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------
-**Sync + `threading`** | Blocking reads in a thread; `threading.Event` and `threading.Lock` for queue synchronization.      | Simpler API; integrates naturally with non-async code; no event loop dependency.
-**Async + `asyncio`**  | `asyncio.create_subprocess_exec`, `asyncio.Lock`, `asyncio.Queue`; `await` on every public method. | Integrates with async frameworks; requires callers to manage an event loop.
+**Sync + `threading`** | `subprocess.Popen` with a blocking stdout reader thread and one in-flight execution lock.            | Simpler API; fits stateful session semantics; no event loop dependency.
+**Async + `asyncio`**  | An alternative design using `asyncio` subprocess and lock primitives for fully awaited APIs.         | Integrates with async frameworks; requires callers to manage an event loop.
 
-**Recommendation**: Implement the **async (`asyncio`) model first** as the primary implementation. Provide a thin synchronous shim (`run_sync`) for callers that do not use an event loop. The async model aligns better with I/O-bound workloads and allows callers to multiplex multiple terminal sessions. The queue invariants (one in-flight, timeout, reject-on-stop) map cleanly to `asyncio` primitives.
+**Recommendation**: Implement the **synchronous session core** as the primary implementation. Keep one session state machine and one in-flight command per session, with explicit timeouts and process-failure exceptions. Run many sessions concurrently at the system level via threads/processes/workers that each own an isolated session instance.
 
 Both models must preserve:
 
@@ -329,11 +335,11 @@ Both models must preserve:
 Risk                                                          | Impact | Probability | Mitigation
 ------------------------------------------------------------- | ------ | ----------- | --------------------------------------------------------------------------------------------------------------------------------------
 `s3270` binary unavailable or incompatible version            | High   | Medium      | Validate binary at `start()` with a `query(Query)` probe; document minimum version requirement; raise informative error.
-Platform differences (Windows vs. Unix subprocess handling)   | High   | Medium      | Test on both platforms early; use `asyncio.create_subprocess_exec` (cross-platform); document platform-specific notes in README.
+Platform differences (Windows vs. Unix subprocess handling)   | High   | Medium      | Test on both platforms early; use `subprocess.Popen` + reader-thread queue pattern; document platform-specific notes in README.
 Chunked stdout interleaving breaks response framing           | High   | Low         | Implement unit tests with synthetic chunked input (split mid-line and mid-sequence); mirror the TypeScript parser test matrix exactly.
 Escape-sequence validation diverges from TypeScript reference | Medium | Medium      | Port the TypeScript regex patterns directly; add a parametrized test suite with identical pass/fail inputs from Appendix B.
 API signature inconsistencies introduced during port          | Medium | Medium      | Define and freeze canonical signatures (`write`, `wait_for`) before writing tests; keep test suite as the source of truth.
-Concurrency bugs in `CommandQueue` under high load            | High   | Low         | Add stress tests (N concurrent callers enqueue simultaneously); verify that exactly one command is in-flight at all times.
+Concurrency bugs in `Transport` under high load               | High   | Low         | Add stress tests across multiple callers and sessions; verify that exactly one command is in-flight per session at all times.
 Scope creep (adding features not in the TypeScript spec)      | Medium | High        | Any addition beyond behavioral parity is explicitly out-of-scope for V1; new features go through a separate issue/PR.
 
 --------------------------------------------------------------------------------
@@ -344,22 +350,22 @@ Phase                      | Task                | Description                  
 -------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------- | ------ | --------
 **Phase 1 -- Foundation**  | `types.py`          | All enums + dataclasses                                                                                        | TODO   | 1d
                            | Project scaffolding | `__init__.py`, `pyproject.toml`, test layout                                                                   | TODO   | 0.5d
-**Phase 2 -- Queue**       | `command_queue.py`  | `CommandQueue` full implementation                                                                             | TODO   | 2d
-                           | Queue unit tests    | Ordering, timeout, stop/drain, concurrent enqueue                                                              | TODO   | 1d
+**Phase 2 -- Transport**   | `transport.py`      | `Transport` full implementation                                                                                | DONE   | 2d
+                           | Transport unit tests| Timeout, process exit, busy rejection, round-trip response framing                                             | DONE   | 1d
 **Phase 3 -- Protocol**    | Response parser     | `handle_output` + `process_response` with chunked-stdout tests                                                 | TODO   | 2d
                            | Status-line parser  | 12-field parser unit tests                                                                                     | TODO   | 1d
                            | Escape validation   | Port `validateStringEscapeSequences`; parametrized tests                                                       | TODO   | 1d
-**Phase 4 -- Terminal**    | Lifecycle           | `start()`, `stop()`, subprocess event handlers                                                                 | TODO   | 1.5d
-                           | Connectivity        | `connect()`, `disconnect()`                                                                                    | TODO   | 1d
-                           | Screen ops          | `screen()`, `refresh()`, `get_screen_buffer()`                                                                 | TODO   | 1d
-                           | Text/input helpers  | `string()`, `move()`, `enter()`, `tab()`, `pf()`, `pa()`, `clear()`                                            | TODO   | 1d
-                           | Query + status      | `query()`, `get()`, `is_()`, `cursor()`, `screen_size()`, `current_field()`, `available()`, all status getters | TODO   | 1.5d
-                           | Read/write helpers  | `write()`, `read()`, `read_many()`, `check()`                                                                  | TODO   | 1d
-                           | Wait helpers        | `wait()`, `wait_output()`, `wait_unlock()`, `wait_ready()`, `wait_for()`                                       | TODO   | 1d
+**Phase 4 -- Terminal**    | Lifecycle           | `start()`, `stop()`, session state transitions, transport delegation                                           | DONE   | 1.5d
+                           | Connectivity        | `connect()`, `disconnect()`                                                                                    | DONE   | 1d
+                           | Screen ops          | `screen()`, `refresh()`, `get_screen_buffer()`                                                                 | DONE   | 1d
+                           | Text/input helpers  | `string()`, `move()`, `enter()`, `tab()`, `pf()`, `pa()`, `clear()`                                            | DONE   | 1d
+                           | Query + status      | `query()`, `get()`, `is_()`, `cursor()`, `screen_size()`, `current_field()`, `available()`, all status getters | DONE   | 1.5d
+                           | Read/write helpers  | `write()`, `read()`, `read_many()`, `check()`                                                                  | DONE   | 1d
+                           | Wait helpers        | `wait()`, `wait_output()`, `wait_unlock()`, `wait_ready()`, `wait_for()`                                       | DONE   | 1d
 **Phase 5 -- Integration** | Integration tests   | Full-flow tests using a real `s3270` binary against a loopback target                                          | TODO   | 2d
                            | Test matrix         | Cover all scenarios from the reference doc's "Test Matrix for Equivalent Behavior"                             | TODO   | 1d
-**Phase 6 -- Polish**      | Sync shim           | `run_sync` wrapper for non-async callers                                                                       | TODO   | 0.5d
-                           | Docs & type hints   | Inline docstrings for public API; ensure all exported symbols are typed                                        | TODO   | 1d
+**Phase 6 -- Polish**      | Sync API polish     | Keep public API synchronous and update docs/examples                                                            | DONE   | 0.5d
+                           | Docs & type hints   | Inline docstrings for public API; ensure all exported symbols are typed                                        | IN PROGRESS | 1d
 
 **Total Estimate**: ~22 days (~4.5 weeks), 1 developer.
 
@@ -369,10 +375,10 @@ Phase                      | Task                | Description                  
 
 Test Type                | Scope                                        | Coverage Target                                   | Approach
 ------------------------ | -------------------------------------------- | ------------------------------------------------- | ------------------------------------
-**Unit -- Queue**        | `CommandQueue` in isolation                  | Full branch coverage                              | Pure Python with mock `send_command`
+**Unit -- Transport**    | `Transport` in isolation                     | Full branch coverage                              | Pure Python with mock process + line queue
 **Unit -- Parser**       | Response framing + status parser             | All framing edge cases                            | Synthetic stdout byte sequences
 **Unit -- Escape**       | `string()` validation                        | All accepted + rejected sequences from Appendix B | Parametrized `pytest`
-**Unit -- Terminal API** | Each public method (mock process)            | All control paths                                 | `unittest.mock.AsyncMock` subprocess
+**Unit -- Terminal API** | Each public method (mock process)            | All control paths                                 | blocking mock process + reader queue
 **Integration**          | Full subprocess lifecycle using real `s3270` | Critical paths                                    | Real binary + loopback or mock host
 
 ### Critical Test Scenarios
@@ -383,8 +389,8 @@ From the reference doc's test matrix:
 - ✅ `connect()` / `disconnect()` with mode and LU name variants.
 - ✅ Raw `command()` success, error, and timeout paths.
 - ✅ Chunked stdout (response split across multiple read events).
-- ✅ Queue ordering: N commands enqueued -- all resolve in FIFO order.
-- ✅ Queue timeout: timed-out command rejected; next command proceeds normally.
+- ✅ One in-flight per session: concurrent callers on one session yield a busy error.
+- ✅ Multi-session parallelism: separate sessions can execute in parallel without cross-talk.
 - ✅ Screen `refresh()` → `read()` → `check()` round-trip.
 - ✅ `refresh()` strips `data:` prefix when present.
 - ✅ `write()` with and without `length` (truncate / right-pad behavior).
@@ -397,7 +403,7 @@ From the reference doc's test matrix:
 - ✅ `wait_for()`: positional and global modes; timeout returns `False`.
 - ✅ `wait_for()` raises if only one of `row`/`col` is provided.
 - ✅ `command()` before `start()`: raises explicit error.
-- ✅ Process exit while command in-flight: queue drained with rejection.
+- ✅ Process exit while command in-flight: transport raises process error.
 - ✅ `disconnect()` when not connected: synthetic success response returned.
 - ✅ Status getters computed correctly from known status-line strings.
 - ✅ Status parser with fewer than 12 fields: returns `None`.
@@ -421,9 +427,9 @@ Libraries such as `py3270` (PyPI) exist but have not been maintained, lack the f
 
 ### Alternative 2 -- Sync-only implementation (no asyncio)
 
-A synchronous implementation using `subprocess.Popen` and `threading.Thread` is simpler to reason about and requires no event loop. However, it complicates multiplexing multiple terminal sessions and does not integrate naturally with async automation frameworks.
+A synchronous implementation using `subprocess.Popen` and `threading.Thread` is simpler to reason about and fits stateful 3270 session semantics. Multiplexing multiple sessions is handled outside the session core by orchestration layers.
 
-**Decision**: Async (`asyncio`) is the primary model; a sync shim is provided for backward compatibility. Re-evaluate if async adds unacceptable complexity during implementation.
+**Decision**: Accepted as the primary model.
 
 ### Alternative 3 -- Binding to a native 3270 library (e.g., libx3270)
 
@@ -438,9 +444,9 @@ Using a C extension or ctypes binding to the x3270 native library would avoid sp
 Dependency       | Purpose                   | Notes
 ---------------- | ------------------------- | -------------------------------------------------
 `s3270` binary   | IBM 3270 emulator process | Must be installed separately; minimum version TBD
-Python ≥ 3.11    | Runtime                   | Requires `asyncio.TaskGroup`, `tomllib`
+Python ≥ 3.11    | Runtime                   | Uses standard library threading + subprocess
 `pytest`         | Test runner               | Dev dependency
-`pytest-asyncio` | Async test support        | Dev dependency
+`pytest-cov`     | Coverage reporting        | Dev dependency
 
 No third-party runtime dependencies beyond the Python standard library are required.
 
@@ -451,7 +457,7 @@ No third-party runtime dependencies beyond the Python standard library are requi
 # | Question                                                                                                           | Owner     | Status
 - | ------------------------------------------------------------------------------------------------------------------ | --------- | ------
 1 | Which Python minimum version to target? 3.10 vs 3.11 vs 3.12?                                                      | Tech Lead | Open
-2 | Should the sync shim block the calling thread or spawn a background thread with a dedicated event loop?            | Tech Lead | Open
+2 | Should a temporary async adapter be provided for external frameworks that still require `await`?                    | Tech Lead | Open
 3 | Should `wait` timeout be clamped to `[0, 300_000]` ms as in TypeScript, or should the upper bound be configurable? | Tech Lead | Open
 4 | Integration test strategy: use a local echo server as a TN3270 stub, or require a real host in CI?                 | Tech Lead | Open
 5 | Should `read_many()` raise on unknown field keys, or silently return `None`?                                       | Tech Lead | Open

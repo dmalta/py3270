@@ -1,5 +1,14 @@
-from py3270.command_queue import CommandQueue
-from py3270.terminal import Terminal, run_sync
+from py3270.errors import (
+    SessionBusyError,
+    SessionDisconnectedError,
+    SessionError,
+    SessionProcessError,
+    SessionTimeoutError,
+    UnexpectedScreenError,
+)
+from py3270.session_manager import SessionManager
+from py3270.terminal import Terminal
+from py3270.transport import Transport
 from py3270.types import (
     ConnectionState,
     EmulatorMode,
@@ -10,6 +19,7 @@ from py3270.types import (
     ScreenFormatting,
     ScreenPosition,
     ScreenSize,
+    SessionState,
     StatusFlag,
     StatusInfo,
     TerminalMode,
@@ -21,7 +31,6 @@ from py3270.types import (
 __version__ = "0.1.0"
 
 __all__ = [
-    "CommandQueue",
     "ConnectionState",
     "EmulatorMode",
     "FieldDefinition",
@@ -31,13 +40,21 @@ __all__ = [
     "ScreenFormatting",
     "ScreenPosition",
     "ScreenSize",
+    "SessionBusyError",
+    "SessionDisconnectedError",
+    "SessionError",
+    "SessionManager",
+    "SessionProcessError",
+    "SessionState",
+    "SessionTimeoutError",
     "StatusFlag",
     "StatusInfo",
     "Terminal",
+    "Transport",
     "TerminalMode",
     "TerminalOptions",
     "TerminalResponse",
     "TerminalSetting",
+    "UnexpectedScreenError",
     "__version__",
-    "run_sync",
 ]

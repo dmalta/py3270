@@ -12,12 +12,11 @@ dependencies = []
 [dependency-groups]
 dev = [
     "pytest>=8.0",
-    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
     "pytest-timeout",
 ]
 
 [tool.pytest.ini_options]
-asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = ["integration: requires s3270 binary on PATH"]
 timeout = 10

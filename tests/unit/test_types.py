@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import enum
 from dataclasses import fields
 
@@ -181,7 +180,3 @@ def test_top_level_exports() -> None:
 def test_version() -> None:
     assert isinstance(py3270.__version__, str)
     assert py3270.__version__.split(".") == ["0", "1", "0"]
-
-
-async def test_asyncio_smoke() -> None:
-    await asyncio.sleep(0)

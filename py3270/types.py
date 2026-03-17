@@ -61,6 +61,15 @@ class EmulatorMode(StrEnum):
     NotConnected = "N"
 
 
+class SessionState(StrEnum):
+    Initial = "INITIAL"
+    Started = "STARTED"
+    Connected = "CONNECTED"
+    Disconnected = "DISCONNECTED"
+    Stopped = "STOPPED"
+    Failed = "FAILED"
+
+
 @dataclass
 class TerminalOptions:
     executable: str = "s3270"
@@ -127,6 +136,7 @@ __all__ = [
     "ScreenFormatting",
     "ScreenPosition",
     "ScreenSize",
+    "SessionState",
     "StatusFlag",
     "StatusInfo",
     "TerminalMode",

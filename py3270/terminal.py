@@ -1,10 +1,15 @@
 from __future__ import annotations
 
-import asyncio
-from typing import Any
+import logging
+import time
+from uuid import uuid4
 
-from py3270._parser import _ResponseParser, parse_status, validate_escape_sequences
-from py3270.command_queue import CommandQueue
+from py3270._parser import parse_status, validate_escape_sequences
+from py3270.transport import Transport
+from py3270.errors import (
+    SessionDisconnectedError,
+    SessionProcessError,
+)
 from py3270.types import (
     EmulatorMode,
     FieldDefinition,
@@ -13,6 +18,7 @@ from py3270.types import (
     ScreenFormatting,
     ScreenPosition,
     ScreenSize,
+    SessionState,
     StatusFlag,
     StatusInfo,
     TerminalMode,
@@ -21,61 +27,34 @@ from py3270.types import (
     TerminalSetting,
 )
 
+_LOG = logging.getLogger(__name__)
+
 
 class Terminal:
-    """High-level s3270 wrapper — manages the s3270 subprocess lifecycle and exposes
-    the full API: commands, connectivity, screen operations, and wait helpers."""
+    """High-level synchronous s3270 wrapper with sequential session semantics."""
 
-    def __init__(self, options: TerminalOptions | None = None) -> None:
+    def __init__(
+        self,
+        options: TerminalOptions | None = None,
+        *,
+        session_id: str | None = None,
+    ) -> None:
         self._options = options or TerminalOptions()
-        self._process: asyncio.subprocess.Process | None = None
+        self._session_id = session_id or str(uuid4())
+        self._transport = Transport(default_timeout_ms=self._options.timeout)
         self._connected: bool = False
         self._screen_buffer: list[str] = []
         self._last_status_info: StatusInfo | None = None
-        self._read_loop_task: asyncio.Task[None] | None = None
-        # _parser and _command_queue are created lazily in start() so that
-        # Terminal() can be instantiated in a synchronous context.
-        self._parser: _ResponseParser | None = None
-        self._command_queue: CommandQueue | None = None
+        self._state = SessionState.Initial
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
     def _assert_running(self) -> None:
-        if self._process is None:
-            raise RuntimeError("Terminal is not running")
-
-    async def _send_raw(self, command: str) -> None:
-        if self._process is None or self._process.stdin is None:
-            raise RuntimeError("Terminal is not running")
-        self._process.stdin.write((command + "\n").encode())
-        await self._process.stdin.drain()
-
-    async def _read_loop(self) -> None:
-        assert self._process is not None
-        assert self._process.stdout is not None
-        assert self._parser is not None
-        while True:
-            chunk = await self._process.stdout.read(4096)
-            if not chunk:
-                break
-            self._parser.feed(chunk.decode(errors="replace"))
-        # Process ended — drain the command queue
-        if self._command_queue is not None:
-            await self._command_queue.stop()
-
-    def _on_response(self, response: TerminalResponse) -> None:
-        if self._command_queue is None:
-            return
-        if response.status:
-            self._last_status_info = parse_status(response.status)
-        if response.ok:
-            self._command_queue.handle_response(response)
-        else:
-            self._command_queue.handle_error(
-                RuntimeError(f"s3270 error: {response.data}")
-            )
+        if not self._transport.available():
+            self._state = SessionState.Failed
+            raise SessionDisconnectedError("Terminal is not running")
 
     def _get_status_field(self, flag: StatusFlag) -> str:
         if self._last_status_info is None:
@@ -94,61 +73,77 @@ class Terminal:
     # ------------------------------------------------------------------
 
     def available(self) -> bool:
-        return self._process is not None
+        return self._transport.available()
 
-    async def start(self) -> None:
-        if self._process is not None:
-            return
-        # Create fresh parser and command queue for this session.
-        self._parser = _ResponseParser(on_complete=self._on_response)
-        self._command_queue = CommandQueue(send_command=self._send_raw)
-        cmd = [self._options.executable, "-script"] + self._options.args
-        self._process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        self._read_loop_task = asyncio.create_task(
-            self._read_loop(), name="s3270-reader"
-        )
+    @property
+    def state(self) -> SessionState:
+        return self._state
 
-    async def stop(self) -> None:
-        if self._process is None:
+    @property
+    def session_id(self) -> str:
+        return self._session_id
+
+    def start(self) -> None:
+        if self.available():
             return
-        if self._command_queue is not None:
-            await self._command_queue.stop()
-        if self._read_loop_task:
-            self._read_loop_task.cancel()
-            try:
-                await self._read_loop_task
-            except asyncio.CancelledError:  # NOSONAR
-                pass
-        try:
-            self._process.stdin.close()
-            self._process.terminate()
-            await self._process.wait()
-        except Exception:
-            pass
-        self._process = None
+        self._transport.start(self._options.executable, self._options.args)
+        self._state = SessionState.Started
+
+    def stop(self) -> None:
+        self._transport.stop()
         self._connected = False
+        self._state = SessionState.Stopped
 
     # ------------------------------------------------------------------
     # Command dispatch
     # ------------------------------------------------------------------
 
-    async def command(self, cmd: str, *, timeout: int | None = None) -> TerminalResponse:
+    def command(self, cmd: str, *, timeout: int | None = None) -> TerminalResponse:
         self._assert_running()
-        assert self._command_queue is not None
-        t_sec = (timeout if timeout is not None else self._options.timeout) / 1000
-        async with asyncio.timeout(t_sec):
-            return await self._command_queue.enqueue(cmd)
+        started_at = time.monotonic()
+        try:
+            response = self._transport.execute(cmd, timeout=timeout)
+        except (SessionDisconnectedError, SessionProcessError):
+            self._state = SessionState.Failed
+            raise
+
+        if response.status:
+            self._last_status_info = parse_status(response.status)
+
+        if response.ok:
+            elapsed_ms = int((time.monotonic() - started_at) * 1000)
+            _LOG.debug(
+                "session=%s pid=%s cmd=%s elapsed_ms=%d ok=true",
+                self._session_id,
+                self._transport.pid(),
+                cmd,
+                elapsed_ms,
+            )
+        else:
+            elapsed_ms = int((time.monotonic() - started_at) * 1000)
+            _LOG.debug(
+                "session=%s pid=%s cmd=%s elapsed_ms=%d ok=false data=%s",
+                self._session_id,
+                self._transport.pid(),
+                cmd,
+                elapsed_ms,
+                response.data,
+            )
+        return response
+
+    def run_step(self, cmd: str, *, timeout: int | None = None) -> TerminalResponse:
+        return self.command(cmd, timeout=timeout)
+
+    def run_workflow(
+        self, commands: list[str], *, timeout: int | None = None
+    ) -> list[TerminalResponse]:
+        return [self.command(cmd, timeout=timeout) for cmd in commands]
 
     # ------------------------------------------------------------------
     # Connectivity
     # ------------------------------------------------------------------
 
-    async def connect(
+    def connect(
         self,
         hostname: str,
         port: int,
@@ -161,26 +156,29 @@ class Terminal:
             addr = f"{lu_name}@{addr}"
         if mode:
             addr = f"{mode.value}:{addr}"
-        resp = await self.command(f"Connect({addr})")
+        resp = self.command(f"Connect({addr})")
         self._connected = resp.ok
+        if self._connected:
+            self._state = SessionState.Connected
         return resp
 
-    async def disconnect(self) -> TerminalResponse:
+    def disconnect(self) -> TerminalResponse:
         if not self._connected:
             return TerminalResponse(ok=True, data="", status="", raw=[])
-        resp = await self.command("Disconnect")
+        resp = self.command("Disconnect")
         self._connected = False
+        self._state = SessionState.Disconnected
         return resp
 
     # ------------------------------------------------------------------
     # Query / status getters
     # ------------------------------------------------------------------
 
-    async def query(self, setting: TerminalSetting) -> TerminalResponse:
-        return await self.command(f"Query({setting.value})")
+    def query(self, setting: TerminalSetting) -> TerminalResponse:
+        return self.command(f"Query({setting.value})")
 
-    async def get(self, setting: TerminalSetting) -> str:
-        resp = await self.query(setting)
+    def get(self, setting: TerminalSetting) -> str:
+        resp = self.query(setting)
         return resp.data
 
     def cursor(self) -> ScreenPosition | None:
@@ -207,8 +205,8 @@ class Terminal:
     # Screen buffer
     # ------------------------------------------------------------------
 
-    async def refresh(self) -> TerminalResponse:
-        resp = await self.command("Ascii1()")
+    def refresh(self) -> TerminalResponse:
+        resp = self.command("Ascii1()")
         self._screen_buffer = resp.data.splitlines()
         return resp
 
@@ -229,19 +227,19 @@ class Terminal:
         result = line[col - 1 : col - 1 + length]
         return result.rstrip() if trim else result
 
-    async def write(
+    def write(
         self, text: str, row: int, col: int, length: int | None = None
     ) -> TerminalResponse:
         if length is not None:
             text = text[:length].ljust(length)
-        await self.command(f"MoveCursor({row},{col})")
-        return await self.string(text)
+        self.command(f"MoveCursor({row},{col})")
+        return self.string(text)
 
     def check(self, text: str, row: int, col: int) -> bool:
         return self.read(row, col, len(text)) == text
 
-    async def read_many(self, fields: list[FieldDefinition]) -> FieldDefinitionRecord:
-        await self.refresh()
+    def read_many(self, fields: list[FieldDefinition]) -> FieldDefinitionRecord:
+        self.refresh()
         result: FieldDefinitionRecord = {}
         for field in fields:
             raw = self.read(field.row, field.col, field.length, trim=field.trim)
@@ -258,50 +256,66 @@ class Terminal:
     # Text / input helpers
     # ------------------------------------------------------------------
 
-    async def string(self, text: str) -> TerminalResponse:
+    def string(self, text: str) -> TerminalResponse:
         validate_escape_sequences(text)
-        return await self.command(f"String({text})")
+        return self.command(f"String({text})")
 
-    async def enter(self) -> TerminalResponse:
-        return await self.command("Enter")
+    def send_text(self, text: str) -> TerminalResponse:
+        return self.string(text)
 
-    async def tab(self) -> TerminalResponse:
-        return await self.command("Tab")
+    def enter(self) -> TerminalResponse:
+        return self.command("Enter")
 
-    async def clear(self) -> TerminalResponse:
-        return await self.command("Clear")
+    def send_enter(self) -> TerminalResponse:
+        return self.enter()
 
-    async def pf(self, n: int) -> TerminalResponse:
+    def tab(self) -> TerminalResponse:
+        return self.command("Tab")
+
+    def clear(self) -> TerminalResponse:
+        return self.command("Clear")
+
+    def pf(self, n: int) -> TerminalResponse:
         if not 1 <= n <= 24:
             raise ValueError(f"PF key must be 1–24, got {n}")
-        return await self.command(f"PF({n})")
+        return self.command(f"PF({n})")
 
-    async def pa(self, n: int) -> TerminalResponse:
+    def send_pf(self, n: int) -> TerminalResponse:
+        return self.pf(n)
+
+    def pa(self, n: int) -> TerminalResponse:
         if not 1 <= n <= 3:
             raise ValueError(f"PA key must be 1–3, got {n}")
-        return await self.command(f"PA({n})")
+        return self.command(f"PA({n})")
 
-    async def move(self, row: int, col: int) -> TerminalResponse:
-        return await self.command(f"MoveCursor({row},{col})")
+    def move(self, row: int, col: int) -> TerminalResponse:
+        return self.command(f"MoveCursor({row},{col})")
+
+    def read_screen(self) -> str:
+        self.refresh()
+        return self.screen()
+
+    def scrape(self, row: int, col: int, length: int, trim: bool = True) -> str:
+        return self.read(row, col, length, trim=trim)
 
     # ------------------------------------------------------------------
     # Wait helpers
     # ------------------------------------------------------------------
 
-    async def wait(self, timeout: int | None = None) -> TerminalResponse:
-        return await self.command("Wait()", timeout=timeout)
+    def wait(self, timeout: int | None = None) -> TerminalResponse:
+        return self.command("Wait()", timeout=timeout)
 
-    async def wait_output(self, timeout: int | None = None) -> TerminalResponse:
-        return await self.command("Wait(Output)", timeout=timeout)
+    def wait_output(self, timeout: int | None = None) -> TerminalResponse:
+        return self.command("Wait(Output)", timeout=timeout)
 
-    async def wait_unlock(self, timeout: int | None = None) -> TerminalResponse:
-        return await self.command("Wait(Unlock)", timeout=timeout)
+    def wait_unlock(self, timeout: int | None = None) -> TerminalResponse:
+        return self.command("Wait(Unlock)", timeout=timeout)
 
-    async def wait_ready(self, timeout: int | None = None) -> None:
-        await self.wait_unlock(timeout)
-        await self.wait_output(timeout)
+    def wait_ready(self, timeout: int | None = None) -> None:
+        self.wait_unlock(timeout)
+        self.wait_output(timeout)
 
-    async def wait_for(
+    def wait_for(
         self,
         text: str,
         row: int | None = None,
@@ -311,33 +325,14 @@ class Terminal:
         if (row is None) != (col is None):
             raise ValueError("both row and col must be provided, or neither")
         timeout = max(0, min(timeout, 300_000))
-        loop = asyncio.get_running_loop()
-        deadline = loop.time() + timeout / 1000
-        while loop.time() < deadline:
-            await self.refresh()
+        deadline = time.monotonic() + timeout / 1000
+        while time.monotonic() < deadline:
+            self.refresh()
             if row is not None:
                 if self.read(row, col, len(text)) == text:  # type: ignore[arg-type]
                     return True
             else:
                 if text in self.screen():
                     return True
-            await asyncio.sleep(0.1)
+            time.sleep(0.1)
         return False
-
-
-def run_sync(coro_fn: Any, *args: Any, **kwargs: Any) -> Any:
-    """Execute an async callable synchronously.
-
-    Raises ``RuntimeError`` when called from within a running event loop; in
-    that case use ``await`` instead.
-    """
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        pass
-    else:
-        raise RuntimeError(
-            "run_sync() cannot be called from within a running event loop. "
-            "Use 'await' instead, or call from a non-async context."
-        )
-    return asyncio.run(coro_fn(*args, **kwargs))
