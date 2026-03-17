@@ -224,6 +224,7 @@ class Terminal:
     # ------------------------------------------------------------------
 
     def refresh(self) -> TerminalResponse:
+        self.wait_ready()
         resp = self.command("Ascii1()")
         self._screen_buffer = resp.data.splitlines()
         return resp
@@ -281,7 +282,9 @@ class Terminal:
         return self.string(text)
 
     def enter(self) -> TerminalResponse:
-        return self.command("Enter")
+        response = self.command("Enter")
+        self.refresh()
+        return response
 
     def send_enter(self) -> TerminalResponse:
         return self.enter()
@@ -290,12 +293,16 @@ class Terminal:
         return self.command("Tab")
 
     def clear(self) -> TerminalResponse:
-        return self.command("Clear")
+        response = self.command("Clear")
+        self.refresh()
+        return response
 
     def pf(self, n: int) -> TerminalResponse:
         if not 1 <= n <= 24:
             raise ValueError(f"PF key must be 1–24, got {n}")
-        return self.command(f"PF({n})")
+        response = self.command(f"PF({n})")
+        self.refresh()
+        return response
 
     def send_pf(self, n: int) -> TerminalResponse:
         return self.pf(n)
@@ -303,7 +310,9 @@ class Terminal:
     def pa(self, n: int) -> TerminalResponse:
         if not 1 <= n <= 3:
             raise ValueError(f"PA key must be 1–3, got {n}")
-        return self.command(f"PA({n})")
+        response = self.command(f"PA({n})")
+        self.refresh()
+        return response
 
     def move(self, row: int, col: int) -> TerminalResponse:
         emulator_row, emulator_col = self._to_emulator_coordinate(row, col)
