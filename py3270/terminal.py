@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+__docformat__ = "google"
+
 import logging
 import time
 from uuid import uuid4
@@ -32,7 +34,15 @@ _DEFAULT_MODEL = "3279-2"
 
 
 class Terminal:
-    """High-level synchronous s3270 wrapper with sequential session semantics."""
+    """High-level synchronous wrapper around a single s3270 process.
+
+    Manages the full lifecycle of a terminal session: start, connect, interact,
+    disconnect, and stop. All operations are synchronous and blocking.
+
+    Args:
+        options: Configuration for the s3270 process. Defaults to `TerminalOptions()`.
+        session_id: Stable identifier for this session. Auto-generated if omitted.
+    """
 
     def __init__(
         self,
@@ -93,23 +103,28 @@ class Terminal:
     # ------------------------------------------------------------------
 
     def available(self) -> bool:
+        """Return `True` if the underlying s3270 process is running."""
         return self._transport.available()
 
     @property
     def state(self) -> SessionState:
+        """Current lifecycle state of the session."""
         return self._state
 
     @property
     def session_id(self) -> str:
+        """Unique identifier for this session."""
         return self._session_id
 
     def start(self) -> None:
+        """Launch the s3270 process. No-op if already running."""
         if self.available():
             return
         self._transport.start(self._options.executable, self._resolved_start_args())
         self._state = SessionState.Started
 
     def stop(self) -> None:
+        """Terminate the s3270 process and release resources."""
         self._transport.stop()
         self._connected = False
         self._state = SessionState.Stopped
@@ -119,6 +134,19 @@ class Terminal:
     # ------------------------------------------------------------------
 
     def command(self, cmd: str, *, timeout: int | None = None) -> TerminalResponse:
+        """Send a raw s3270 command and return the response.
+
+        Args:
+            cmd: The s3270 command string, e.g. `"Enter"` or `"String(text)"`.
+            timeout: Milliseconds to wait for a response. Uses the session default if omitted.
+
+        Returns:
+            A `TerminalResponse` with `ok`, `data`, and `status`.
+
+        Raises:
+            SessionDisconnectedError: If the s3270 process is not running.
+            SessionTimeoutError: If the command does not complete within *timeout*.
+        """
         self._assert_running()
         started_at = time.monotonic()
         try:
@@ -152,9 +180,24 @@ class Terminal:
         return response
 
     def run_step(self, cmd: str, *, timeout: int | None = None) -> TerminalResponse:
+        """Alias for `command`. Sends a single raw s3270 command.
+
+        Args:
+            cmd: The s3270 command string.
+            timeout: Milliseconds to wait. Uses the session default if omitted.
+        """
         return self.command(cmd, timeout=timeout)
 
     def run_workflow(self, commands: list[str], *, timeout: int | None = None) -> list[TerminalResponse]:
+        """Execute a sequence of raw s3270 commands in order.
+
+        Args:
+            commands: List of s3270 command strings to execute sequentially.
+            timeout: Per-command timeout in milliseconds. Uses the session default if omitted.
+
+        Returns:
+            List of `TerminalResponse` objects, one per command.
+        """
         return [self.command(cmd, timeout=timeout) for cmd in commands]
 
     # ------------------------------------------------------------------
@@ -169,6 +212,17 @@ class Terminal:
         mode: TerminalMode | None = None,
         lu_name: str | None = None,
     ) -> TerminalResponse:
+        """Connect to a TN3270 host.
+
+        Args:
+            hostname: Hostname or IP address of the mainframe.
+            port: TCP port (commonly 23 or 992 for TLS).
+            mode: Optional `TerminalMode` prefix (e.g. `NoTN3270E`).
+            lu_name: Optional LU name for LU-to-LU connections.
+
+        Returns:
+            `TerminalResponse` — `ok` if the connection was established.
+        """
         addr = f"{hostname.lower()}:{port}"
         if lu_name:
             addr = f"{lu_name}@{addr}"
@@ -181,6 +235,7 @@ class Terminal:
         return resp
 
     def disconnect(self) -> TerminalResponse:
+        """Disconnect from the host. No-op (returns ok) if not connected."""
         if not self._connected:
             return TerminalResponse(ok=True, data="", status="", raw=[])
         resp = self.command("Disconnect")
@@ -193,30 +248,57 @@ class Terminal:
     # ------------------------------------------------------------------
 
     def query(self, setting: TerminalSetting) -> TerminalResponse:
+        """Issue a `Query()` command for the given setting.
+
+        Args:
+            setting: The `TerminalSetting` to query (e.g. `Host`, `Model`).
+
+        Returns:
+            `TerminalResponse` with the value in `data`.
+        """
         return self.command(f"Query({setting.value})")
 
     def get(self, setting: TerminalSetting) -> str:
+        """Return the string value of a terminal setting.
+
+        Args:
+            setting: The `TerminalSetting` to retrieve.
+
+        Returns:
+            The setting value as a plain string.
+        """
         resp = self.query(setting)
         return resp.data
 
     def cursor(self) -> ScreenPosition | None:
+        """Return the current cursor position (1-based row/col), or `None` if unknown."""
         if self._last_status_info is None:
             return None
         s = self._last_status_info
         return self._to_display_position(s.cursor_row, s.cursor_col)
 
     def screen_size(self) -> ScreenSize | None:
+        """Return the current screen dimensions, or `None` if not yet known."""
         if self._last_status_info is None:
             return None
         return ScreenSize(self._last_status_info.rows, self._last_status_info.cols)
 
     def is_(self, flag: StatusFlag) -> bool:
+        """Test a boolean status flag from the last s3270 status line.
+
+        Args:
+            flag: A `StatusFlag` such as `Formatted` or `KeyboardLock`.
+
+        Returns:
+            `True` if the flag is set.
+        """
         val = self._get_status_field(flag)
         if flag == StatusFlag.KeyboardLock:
             return val != "false"
         return val in ("true", "1")
 
     def current_field(self) -> ScreenPosition | None:
+        """Return the position of the current input field (same as `cursor`)."""
         return self.cursor()
 
     # ------------------------------------------------------------------
@@ -224,15 +306,22 @@ class Terminal:
     # ------------------------------------------------------------------
 
     def refresh(self) -> TerminalResponse:
+        """Wait for the host and update the internal screen buffer via `Ascii1()`.
+
+        Returns:
+            `TerminalResponse` from the `Ascii1()` command.
+        """
         self.wait_ready()
         resp = self.command("Ascii1()")
         self._screen_buffer = resp.data.splitlines()
         return resp
 
     def screen(self) -> str:
+        """Return the last refreshed screen as a single newline-joined string."""
         return "\n".join(self._screen_buffer)
 
     def get_screen_buffer(self) -> list[str]:
+        """Return the last refreshed screen as a list of row strings."""
         return list(self._screen_buffer)
 
     # ------------------------------------------------------------------
@@ -240,6 +329,17 @@ class Terminal:
     # ------------------------------------------------------------------
 
     def read(self, row: int, col: int, length: int, trim: bool = True) -> str:
+        """Read a region from the screen buffer.
+
+        Args:
+            row: 1-based row number.
+            col: 1-based column number.
+            length: Number of characters to read.
+            trim: Strip trailing whitespace from the result. Defaults to `True`.
+
+        Returns:
+            The extracted string, or `""` if the row is out of range.
+        """
         if row < 1 or row > len(self._screen_buffer):
             return ""
         line = self._screen_buffer[row - 1]
@@ -247,15 +347,39 @@ class Terminal:
         return result.rstrip() if trim else result
 
     def write(self, text: str, row: int, col: int, length: int | None = None) -> TerminalResponse:
+        """Move the cursor then type *text* with `String()`.
+
+        Args:
+            text: Text to send.
+            row: 1-based destination row.
+            col: 1-based destination column.
+            length: If provided, right-justify *text* in a field of this width.
+        """
         if length is not None:
             text = text[:length].rjust(length)
         self.move(row, col)
         return self.string(text)
 
     def check(self, text: str, row: int, col: int) -> bool:
+        """Return `True` if *text* appears at the given screen position.
+
+        Args:
+            text: Expected string.
+            row: 1-based row.
+            col: 1-based column.
+        """
         return self.read(row, col, len(text)) == text
 
     def read_many(self, fields: list[FieldDefinition]) -> FieldDefinitionRecord:
+        """Refresh the screen and read multiple fields in one call.
+
+        Args:
+            fields: List of `FieldDefinition` descriptors.
+
+        Returns:
+            Dict mapping each field's `name` (or `"row,col"` key) to its value.
+            Numeric fields are coerced to `float`; blank numeric fields become `None`.
+        """
         self.refresh()
         result: FieldDefinitionRecord = {}
         for field in fields:
@@ -275,29 +399,50 @@ class Terminal:
     # ------------------------------------------------------------------
 
     def string(self, text: str) -> TerminalResponse:
+        """Send text to the emulator using the `String()` action.
+
+        Args:
+            text: The string to type, including s3270 escape sequences.
+
+        Raises:
+            ValueError: If *text* contains an invalid s3270 escape sequence.
+        """
         validate_escape_sequences(text)
         return self.command(f"String({text})")
 
     def send_text(self, text: str) -> TerminalResponse:
+        """Alias for `string`."""
         return self.string(text)
 
     def enter(self) -> TerminalResponse:
+        """Press the Enter key and refresh the screen."""
         response = self.command("Enter")
         self.refresh()
         return response
 
     def send_enter(self) -> TerminalResponse:
+        """Alias for `enter`."""
         return self.enter()
 
     def tab(self) -> TerminalResponse:
+        """Press the Tab key to advance to the next input field."""
         return self.command("Tab")
 
     def clear(self) -> TerminalResponse:
+        """Press the Clear key and refresh the screen."""
         response = self.command("Clear")
         self.refresh()
         return response
 
     def pf(self, n: int) -> TerminalResponse:
+        """Press a PF function key and refresh the screen.
+
+        Args:
+            n: PF key number, 1–24.
+
+        Raises:
+            ValueError: If *n* is outside the range 1–24.
+        """
         if not 1 <= n <= 24:
             raise ValueError(f"PF key must be 1–24, got {n}")
         response = self.command(f"PF({n})")
@@ -305,9 +450,18 @@ class Terminal:
         return response
 
     def send_pf(self, n: int) -> TerminalResponse:
+        """Alias for `pf`."""
         return self.pf(n)
 
     def pa(self, n: int) -> TerminalResponse:
+        """Press a PA program-attention key and refresh the screen.
+
+        Args:
+            n: PA key number, 1–3.
+
+        Raises:
+            ValueError: If *n* is outside the range 1–3.
+        """
         if not 1 <= n <= 3:
             raise ValueError(f"PA key must be 1–3, got {n}")
         response = self.command(f"PA({n})")
@@ -315,14 +469,22 @@ class Terminal:
         return response
 
     def move(self, row: int, col: int) -> TerminalResponse:
+        """Move the cursor to the specified screen position.
+
+        Args:
+            row: 1-based row number.
+            col: 1-based column number.
+        """
         emulator_row, emulator_col = self._to_emulator_coordinate(row, col)
         return self.command(f"MoveCursor({emulator_row},{emulator_col})")
 
     def read_screen(self) -> str:
+        """Refresh the screen buffer and return its full text content."""
         self.refresh()
         return self.screen()
 
     def scrape(self, row: int, col: int, length: int, trim: bool = True) -> str:
+        """Alias for `read`."""
         return self.read(row, col, length, trim=trim)
 
     # ------------------------------------------------------------------
@@ -330,15 +492,37 @@ class Terminal:
     # ------------------------------------------------------------------
 
     def wait(self, timeout: int | None = None) -> TerminalResponse:
+        """Issue `Wait()` — blocks until the emulator is ready.
+
+        Args:
+            timeout: Milliseconds to wait. Uses the session default if omitted.
+        """
         return self.command("Wait()", timeout=timeout)
 
     def wait_output(self, timeout: int | None = None) -> TerminalResponse:
+        """Issue `Wait(Output)` — blocks until the host sends new screen data.
+
+        Args:
+            timeout: Milliseconds to wait. Uses the session default if omitted.
+        """
         return self.command("Wait(Output)", timeout=timeout)
 
     def wait_unlock(self, timeout: int | None = None) -> TerminalResponse:
+        """Issue `Wait(Unlock)` — blocks until the keyboard is unlocked.
+
+        Args:
+            timeout: Milliseconds to wait. Uses the session default if omitted.
+        """
         return self.command("Wait(Unlock)", timeout=timeout)
 
     def wait_ready(self, timeout: int | None = None) -> None:
+        """Wait for the keyboard to unlock, then wait for host output.
+
+        Convenience wrapper around `wait_unlock` + `wait_output`.
+
+        Args:
+            timeout: Per-call timeout in milliseconds. Uses the session default if omitted.
+        """
         self.wait_unlock(timeout)
         self.wait_output(timeout)
 
@@ -349,6 +533,20 @@ class Terminal:
         col: int | None = None,
         timeout: int = 30_000,
     ) -> bool:
+        """Poll the screen until *text* appears, or *timeout* elapses.
+
+        Args:
+            text: The string to watch for.
+            row: 1-based row to check. Must be paired with *col*.
+            col: 1-based column to check. Must be paired with *row*.
+            timeout: Total wait time in milliseconds (capped at 300 000). Defaults to 30 000.
+
+        Returns:
+            ``True`` if *text* was found before the deadline, ``False`` otherwise.
+
+        Raises:
+            ValueError: If only one of *row* / *col* is provided.
+        """
         if (row is None) != (col is None):
             raise ValueError("both row and col must be provided, or neither")
         timeout = max(0, min(timeout, 300_000))

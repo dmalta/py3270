@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+__docformat__ = "google"
+
 import queue
 import subprocess
 import threading
@@ -54,7 +56,15 @@ class _StdoutReader(threading.Thread):
 
 
 class Transport:
-    """Low-level process transport for one s3270 session."""
+    """Low-level process transport for one s3270 session.
+
+    Manages the s3270 subprocess, its stdin/stdout pipe, and the lock that
+    prevents concurrent in-flight commands.
+
+    Args:
+        default_timeout_ms: Timeout in milliseconds used when callers do not
+            supply an explicit timeout to `execute`.
+    """
 
     def __init__(self, *, default_timeout_ms: int) -> None:
         self._default_timeout_ms = default_timeout_ms
@@ -65,14 +75,22 @@ class Transport:
         self._stopped = False
 
     def available(self) -> bool:
+        """Return ``True`` if the s3270 process is running."""
         return self._process is not None and self._process.poll() is None
 
     def pid(self) -> int | None:
+        """Return the PID of the s3270 process, or ``None`` if not started."""
         if self._process is None:
             return None
         return self._process.pid
 
     def start(self, executable: str, args: list[str]) -> None:
+        """Launch the s3270 process. No-op if already running.
+
+        Args:
+            executable: Path or name of the s3270 binary.
+            args: Extra command-line arguments (e.g. ``["-model", "3279-2"]``).
+        """
         if self.available():
             return
 
@@ -94,6 +112,7 @@ class Transport:
         self._stopped = False
 
     def stop(self) -> None:
+        """Terminate the s3270 process and clean up resources."""
         self._stopped = True
         if self._process is None:
             return
@@ -122,6 +141,20 @@ class Transport:
         self._process = None
 
     def execute(self, command: str, *, timeout: int | None = None) -> TerminalResponse:
+        """Send *command* to s3270 and return the response.
+
+        Args:
+            command: The raw s3270 command string.
+            timeout: Timeout in milliseconds. Falls back to *default_timeout_ms* if ``None``.
+
+        Returns:
+            A `TerminalResponse` with `ok`, `data`, and `status`.
+
+        Raises:
+            SessionBusyError: If another command is already in flight.
+            SessionTimeoutError: If no response arrives before the timeout.
+            SessionProcessError: If the s3270 process terminates unexpectedly.
+        """
         if self._stopped:
             raise RuntimeError("Transport is stopped")
         if not self._inflight_lock.acquire(blocking=False):

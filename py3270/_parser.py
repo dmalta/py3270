@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+__docformat__ = "google"
+
 import re
 from typing import Callable
 
@@ -122,13 +124,13 @@ _PA = re.compile(r"[1-3](?!\d)")
 
 
 def validate_escape_sequences(text: str) -> None:
-    """Scan *text* for s3270 escape sequences and raise :exc:`ValueError` on
+    """Scan *text* for s3270 escape sequences and raise `ValueError` on
     the first invalid one.
 
     Valid sequences mirror Appendix B of the s3270 documentation:
-    ``\\\\``, ``\\"``, ``\\b``, ``\\f``, ``\\n``, ``\\r``, ``\\t``, ``\\T``,
-    ``\\eXX`` / ``\\eXXXX`` (EBCDIC), ``\\uXX``–``\\uXXXXX`` (Unicode),
-    ``\\xXX``–``\\xXXXXX`` (Unicode), ``\\pa1``–``\\pa3``, ``\\pf1``–``\\pf24``.
+    `\\\\`, `\\"`, `\\b`, `\\f`, `\\n`, `\\r`, `\\t`, `\\T`,
+    `\\eXX` / `\\eXXXX` (EBCDIC), `\\uXX`–`\\uXXXXX` (Unicode),
+    `\\xXX`–`\\xXXXXX` (Unicode), `\\pa1`–`\\pa3`, `\\pf1`–`\\pf24`.
     """
     i = 0
     n = len(text)

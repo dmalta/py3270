@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+__docformat__ = "google"
+
 
 class SessionError(Exception):
     """Base exception for session-level failures."""

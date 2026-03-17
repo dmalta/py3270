@@ -76,6 +76,7 @@ if __name__ == "__main__":
 - [Advanced Usage](docs/user_guide/07_advanced_usage.md)
 - [Troubleshooting](docs/user_guide/08_troubleshooting.md)
 - [Glossary](docs/user_guide/GLOSSARY.md)
+- [API Reference](../api_reference/py3270.html)
 
 ## Additional Documentation
 
