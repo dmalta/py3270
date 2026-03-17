@@ -25,6 +25,7 @@ A command-line 3270 terminal emulator developed by Paul Mattes. It implements th
 ## x3270 Suite
 
 A collection of 3270 terminal emulators including:
+
 - `x3270`: an interactive X11 graphical terminal
 - `s3270`: a scriptable terminal emulator
 - `c3270`: a curses-based terminal
@@ -49,7 +50,7 @@ Positions on the screen grid, both 1-indexed. For example, row 1, column 1 is th
 
 ## AID Key
 
-An Attention Identifier key—a special key that sends a command and current screen data to the host. Common AID keys include PF (Program Function) keys and PA (Program Attention) keys.
+An Attention Identifier key--a special key that sends a command and current screen data to the host. Common AID keys include PF (Program Function) keys and PA (Program Attention) keys.
 
 ## PF Key
 
@@ -61,11 +62,12 @@ Program Attention keys (PA1, PA2, PA3) that interrupt the current operation and 
 
 ## LU Name
 
-Logical Unit name—an identifier for a specific terminal session on the mainframe. Some mainframe applications require an LU name to establish a connection. If not specified, the host assigns a default.
+Logical Unit name--an identifier for a specific terminal session on the mainframe. Some mainframe applications require an LU name to establish a connection. If not specified, the host assigns a default.
 
 ## Connection State
 
 The current connectivity status of the Terminal:
+
 - **Initial**: Terminal has not been started yet.
 - **Started**: Terminal process is running, but not connected to a host.
 - **Connected**: Terminal is connected to a mainframe host.
@@ -75,7 +77,7 @@ The current connectivity status of the Terminal:
 
 ## EBCDIC
 
-Extended Binary Coded Decimal Interchange Code—the character encoding used by IBM mainframes. py3270 and s3270 handle EBCDIC translation automatically.
+Extended Binary Coded Decimal Interchange Code--the character encoding used by IBM mainframes. py3270 and s3270 handle EBCDIC translation automatically.
 
 ## Escape Sequence
 

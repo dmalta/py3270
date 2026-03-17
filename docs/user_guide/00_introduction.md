@@ -4,7 +4,7 @@ Welcome to py3270! This guide will teach you how to automate IBM mainframe inter
 
 ## What Is a 3270 Terminal?
 
-Think of a 3270 terminal as an old text-only browser. Instead of a graphical web interface, it displays information in a structured, grid-based format—typically 24 rows by 80 columns. Users interact with these screens by typing text, pressing function keys, and moving a cursor.
+Think of a 3270 terminal as an old text-only browser. Instead of a graphical web interface, it displays information in a structured, grid-based format--typically 24 rows by 80 columns. Users interact with these screens by typing text, pressing function keys, and moving a cursor.
 
 The 3270 protocol has been used for decades and remains common in enterprise mainframe environments. While modern systems use graphical interfaces, many mission-critical financial, insurance, and government applications still run on mainframes and communicate through 3270 terminals.
 
@@ -13,6 +13,7 @@ The 3270 protocol has been used for decades and remains common in enterprise mai
 A mainframe is a large, powerful computing system typically owned and operated by enterprises. Unlike a personal computer, a mainframe can serve thousands of users simultaneously and is designed for reliability, security, and processing high volumes of transactions.
 
 Mainframes excel at:
+
 - Processing structured business data (financial transactions, insurance claims, personnel records)
 - Running 24/7 without interruption
 - Securely managing sensitive information
@@ -44,7 +45,7 @@ Here's what happens at each layer:
 4. **s3270** receives responses from the mainframe, parses them, and presents screen data back to py3270
 5. **py3270** caches the screen and makes it available to your code
 
-This layered approach means py3270 doesn't need to implement the TN3270 protocol itself—it delegates that work to the well-maintained s3270 emulator.
+This layered approach means py3270 doesn't need to implement the TN3270 protocol itself--it delegates that work to the well-maintained s3270 emulator.
 
 ## Why Python Matters Here
 
@@ -55,7 +56,7 @@ Automating 3270 terminal interactions is useful for:
 - **Integration**: Connect modern applications to mission-critical mainframe systems
 - **Scripting**: Run repetitive terminal-based tasks on a schedule
 
-Python makes this automation accessible. Instead of writing shell scripts or VBScript macros, you write clear, readable Python code that interacts with the mainframe just as a human operator would—but faster and without errors.
+Python makes this automation accessible. Instead of writing shell scripts or VBScript macros, you write clear, readable Python code that interacts with the mainframe just as a human operator would--but faster and without errors.
 
 ## The py3270 Synchronous API
 

@@ -6,14 +6,14 @@ This chapter covers how to establish and manage connections to mainframe hosts.
 
 Before you can interact with a mainframe application, you must establish a TN3270 connection. The terminal has distinct states:
 
-| State | Meaning |
-|-------|---------|
-| **Initial** | Terminal has not been started yet |
-| **Started** | s3270 is running but not connected to a host |
-| **Connected** | Connected to a mainframe host |
-| **Disconnected** | Disconnected from the host; s3270 still running |
-| **Stopped** | s3270 has been shut down |
-| **Failed** | Terminal encountered an error |
+State            | Meaning
+---------------- | -----------------------------------------------
+**Initial**      | Terminal has not been started yet
+**Started**      | s3270 is running but not connected to a host
+**Connected**    | Connected to a mainframe host
+**Disconnected** | Disconnected from the host; s3270 still running
+**Stopped**      | s3270 has been shut down
+**Failed**       | Terminal encountered an error
 
 ## Checking the Terminal State
 
@@ -53,10 +53,10 @@ term.connect("myhost.company.com", 23)
 
 The `connect()` method takes two required parameters:
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `hostname` | `str` | The hostname or IP address of the mainframe |
-| `port` | `int` | The TN3270 port (typically 23 or 3270) |
+Parameter  | Type  | Description
+---------- | ----- | -------------------------------------------
+`hostname` | `str` | The hostname or IP address of the mainframe
+`port`     | `int` | The TN3270 port (typically 23 or 3270)
 
 ## Connection with Mode
 
@@ -74,13 +74,13 @@ term.connect("host.example.com", 23, mode=TerminalMode.Passthru)
 
 Available modes:
 
-| Mode | Value | Purpose |
-|------|-------|---------|
-| `TerminalMode.Passthru` | `"P"` | Pass-through mode (default) |
-| `TerminalMode.SuppressExtendedDS` | `"S"` | Suppress extended data streams |
-| `TerminalMode.NoTN3270E` | `"N"` | Disable TN3270E extensions |
-| `TerminalMode.SSLTunnel` | `"L"` | Use SSL/TLS encryption |
-| `TerminalMode.BindStrict` | `"B"` | Strict bind negotiation |
+Mode                              | Value | Purpose
+--------------------------------- | ----- | ------------------------------
+`TerminalMode.Passthru`           | `"P"` | Pass-through mode (default)
+`TerminalMode.SuppressExtendedDS` | `"S"` | Suppress extended data streams
+`TerminalMode.NoTN3270E`          | `"N"` | Disable TN3270E extensions
+`TerminalMode.SSLTunnel`          | `"L"` | Use SSL/TLS encryption
+`TerminalMode.BindStrict`         | `"B"` | Strict bind negotiation
 
 Most hosts work without specifying a mode. Consult your mainframe administrator if you need a specific mode.
 
@@ -160,19 +160,19 @@ try:
     # Start the terminal
     term.start()
     assert term.state == SessionState.Started
-    
+
     # Connect to the host
     term.connect("production.mainframe.com", 23)
     assert term.state == SessionState.Connected
-    
+
     # Do work...
     term.refresh()
     print(term.screen())
-    
+
     # Disconnect
     term.disconnect()
     assert term.state == SessionState.Disconnected
-    
+
 finally:
     # Always stop to clean up resources
     term.stop()

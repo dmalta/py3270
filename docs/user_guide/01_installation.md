@@ -4,7 +4,7 @@ This chapter guides you through installing both s3270 and py3270.
 
 ## Install s3270
 
-py3270 requires `s3270`—the scriptable terminal emulator. Choose your platform below.
+py3270 requires `s3270`--the scriptable terminal emulator. Choose your platform below.
 
 ### macOS
 
@@ -131,13 +131,13 @@ If you see an error like "s3270: command not found" or "executable not found: s3
 2. **Add to PATH**: Add the installation directory to your system PATH environment variable.
 3. **Use the full path**: When creating a py3270 Terminal, provide the full path to s3270:
 
-   ```python
-   from py3270 import Terminal, TerminalOptions
+  ```python
+  from py3270 import Terminal, TerminalOptions
 
-   options = TerminalOptions(executable="C:\\Program Files\\x3270\\s3270.exe")
-   term = Terminal(options)
-   term.start()
-   ```
+  options = TerminalOptions(executable="C:\\Program Files\\x3270\\s3270.exe")
+  term = Terminal(options)
+  term.start()
+  ```
 
 ### Python import errors
 

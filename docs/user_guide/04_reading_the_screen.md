@@ -4,15 +4,15 @@ This chapter covers how to extract data from 3270 screens using py3270.
 
 ## The Screen Coordinate System
 
-A 3270 screen is a grid of characters, typically 24 rows by 80 columns. **All coordinates are 1-indexed**—the top-left corner is row 1, column 1.
+A 3270 screen is a grid of characters, typically 24 rows by 80 columns. **All coordinates are 1-indexed**--the top-left corner is row 1, column 1.
 
 ```
 Column:   1                            40                           80
 Row 1:    | HOME | WELCOME TO ACME CORP |  |                        |
-Row 2:    |      | User ID: [________]  |  |                        |
-Row 3:    |      | Password: [________]  |  |                        |
+Row 2:    |      | User ID:  [_______]  |  |                        |
+Row 3:    |      | Password: [_______]  |  |                        |
 ...
-Row 24:   | Press PF3 to exit                                        |
+Row 24:   | Press PF3 to exit                                       |
 ```
 
 ## Refresh First
@@ -48,7 +48,7 @@ print(screen_text)
 Output:
 
 ```
- Welcome to ACME Corporation
+Welcome to ACME Corporation
  User ID: [   ]
  Password: [   ]
 
@@ -73,12 +73,12 @@ print(f"Label: '{passwd_label}'")
 
 Arguments:
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `row` | `int` | Row number (1-indexed) |
-| `col` | `int` | Column number (1-indexed) |
-| `length` | `int` | Number of characters to read |
-| `trim` | `bool` | Remove trailing whitespace (default: `True`) |
+Parameter | Type   | Description
+--------- | ------ | --------------------------------------------
+`row`     | `int`  | Row number (1-indexed)
+`col`     | `int`  | Column number (1-indexed)
+`length`  | `int`  | Number of characters to read
+`trim`    | `bool` | Remove trailing whitespace (default: `True`)
 
 By default, `read()` trims trailing whitespace. Use `trim=False` to preserve spacing:
 
@@ -121,9 +121,9 @@ from py3270 import FieldDefinition
 term.refresh()
 
 fields = [
-    FieldDefinition(row=2, col=12, length=8, type="string"),
-    FieldDefinition(row=3, col=12, length=15, type="string"),
-    FieldDefinition(row=5, col=20, length=10, type="number"),
+    FieldDefinition(row=2, col=12, length=8, name="user_id"),
+    FieldDefinition(row=3, col=12, length=15, name="email"),
+    FieldDefinition(row=5, col=20, length=10, type="number", name="balance"),
 ]
 
 values = term.read_many(fields)
@@ -134,23 +134,36 @@ Output:
 
 ```python
 {
-    "2,12": "user123",
-    "3,12": "john.doe@example.c",
-    "5,20": 12345.0
+    "user_id": "user123",
+    "email": "john.doe@example.c",
+    "balance": 12345.0
 }
 ```
 
 Each field is defined by:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `row` | `int` | Row number (1-indexed) |
-| `col` | `int` | Column number (1-indexed) |
-| `length` | `int` | Number of characters to read |
-| `type` | `str` | `"string"` or `"number"` |
-| `trim` | `bool` | Remove trailing whitespace for strings (default: `True`) |
+Field    | Type   | Description
+-------- | ------ | --------------------------------------------------------
+`row`    | `int`  | Row number (1-indexed)
+`col`    | `int`  | Column number (1-indexed)
+`length` | `int`  | Number of characters to read
+`type`   | `str`  | `"string"` or `"number"` (default: `"string"`)
+`trim`   | `bool` | Remove trailing whitespace for strings (default: `True`)
+`name`   | `str`  | Optional dictionary key for the extracted value
 
-Results are stored in a dictionary with key `"{row},{col}"`. For `type="number"`, the value is converted to `float` or `None` if unparseable.
+If `name` is set, results use that as the dictionary key. Otherwise they fall back to `"{row},{col}"`. For `type="number"`, the value is converted to `float` or `None` if empty.
+
+> **Shorthand**: The `field()` helper accepts the same arguments positionally, which is more compact for long field lists:
+>
+> ```python
+> from py3270 import field
+>
+> fields = [
+>     field(2, 12, 8, name="user_id"),
+>     field(3, 12, 15, name="email"),
+>     field(5, 20, 10, "number", name="balance"),
+> ]
+> ```
 
 ## Search for Text on Screen
 
@@ -171,12 +184,12 @@ Or use `wait_for()` which does this polling (see [Waiting for Changes](06_waitin
 
 ## Common Mistakes
 
-| Mistake | Issue | Fix |
-|---------|-------|-----|
-| Forgetting `refresh()` | Screen buffer is empty/stale | Always call `term.refresh()` before reading |
-| Wrong coordinates | Off-by-one errors | Remember: 1-indexed, not 0-indexed |
-| No trim | Extra spaces in results | Use `trim=True` (the default) for clean text |
-| Assuming immediate updates | Data not ready after input | Call `term.wait_for()` before `refresh()` |
+Mistake                    | Issue                        | Fix
+-------------------------- | ---------------------------- | --------------------------------------------
+Forgetting `refresh()`     | Screen buffer is empty/stale | Always call `term.refresh()` before reading
+Wrong coordinates          | Off-by-one errors            | Remember: 1-indexed, not 0-indexed
+No trim                    | Extra spaces in results      | Use `trim=True` (the default) for clean text
+Assuming immediate updates | Data not ready after input   | Call `term.wait_for()` before `refresh()`
 
 ## Next Steps
 

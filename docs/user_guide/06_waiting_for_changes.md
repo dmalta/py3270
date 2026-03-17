@@ -6,7 +6,7 @@ This chapter covers how to coordinate with asynchronous host responses using py3
 
 When you send input to the host (using `enter()`, `pf()`, etc.), the host doesn't respond instantly. It needs time to process your command, perform business logic, and generate a response screen.
 
-If you try to read the screen immediately after sending input, you'll see the *old* screen, not the result. Waiting helpers block until the host is ready, ensuring you read fresh data.
+If you try to read the screen immediately after sending input, you'll see the _old_ screen, not the result. Waiting helpers block until the host is ready, ensuring you read fresh data.
 
 ## Wait for Text to Appear
 
@@ -23,6 +23,7 @@ else:
 ```
 
 `wait_for()` returns:
+
 - `True` if the text appeared within the timeout
 - `False` if the timeout expired without finding the text
 
@@ -141,17 +142,17 @@ try:
     term.string("user123")
     term.tab()
     term.string("pass456")
-    
+
     # Send the form
     term.enter()
-    
+
     # Wait for host to respond
     try:
         term.wait_ready(timeout=5_000)
     except SessionTimeoutError:
         print("Login timeout")
         raise
-    
+
     # Refresh and check result
     term.refresh()
     if term.check("ERROR", 1, 1):
@@ -159,7 +160,7 @@ try:
         print(term.screen())
     else:
         print("Login successful")
-        
+
 except Exception as e:
     print(f"Error: {e}")
 finally:
@@ -181,17 +182,17 @@ Use `5_000` (with underscores for readability) or `5000` for 5 seconds.
 
 ## Polling Internals
 
-Internally, `wait_for()` polls the screen repeatedly every 100 milliseconds and checks for your text. This means `wait_for()` is cheap CPU-wise but responsive—it will detect text within ~100 ms of it appearing.
+Internally, `wait_for()` polls the screen repeatedly every 100 milliseconds and checks for your text. This means `wait_for()` is cheap CPU-wise but responsive--it will detect text within ~100 ms of it appearing.
 
 ## When to Use Which Wait
 
-| Scenario | Use |
-|----------|-----|
-| Check for specific text | `wait_for(text)` |
-| Wait for specific position | `wait_for(text, row, col)` |
-| Just wait for readiness | `wait_ready()` |
-| Handle timeout gracefully | `wait_for()` (returns False) |
-| Fail hard on timeout | `wait_unlock()` / `wait_output()` (raises) |
+Scenario                   | Use
+-------------------------- | ------------------------------------------
+Check for specific text    | `wait_for(text)`
+Wait for specific position | `wait_for(text, row, col)`
+Just wait for readiness    | `wait_ready()`
+Handle timeout gracefully  | `wait_for()` (returns False)
+Fail hard on timeout       | `wait_unlock()` / `wait_output()` (raises)
 
 ## Next Steps
 

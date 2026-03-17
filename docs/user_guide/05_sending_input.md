@@ -41,14 +41,14 @@ term.pf(24)  # Press PF24 (highest PF key)
 
 Each application defines what each PF key does. Common conventions:
 
-| Key | Often Means |
-|-----|------------|
-| PF1 | Help |
-| PF3 | Exit |
-| PF4 | Delete |
-| PF5 | Refresh |
-| PF7 | Back/Previous page |
-| PF8 | Forward/Next page |
+Key | Often Means
+--- | ------------------
+PF1 | Help
+PF3 | Exit
+PF4 | Delete
+PF5 | Refresh
+PF7 | Back/Previous page
+PF8 | Forward/Next page
 
 Check your application's documentation for the specific meanings.
 
@@ -64,11 +64,11 @@ term.pa(3)   # Press PA3
 
 PA keys interrupt the current operation and signal the host. Common uses:
 
-| Key | Often Means |
-|-----|------------|
-| PA1 | Attention / Interrupt |
-| PA2 | Reshow / Refresh |
-| PA3 | Clear / Reset |
+Key | Often Means
+--- | ---------------------
+PA1 | Attention / Interrupt
+PA2 | Reshow / Refresh
+PA3 | Clear / Reset
 
 ## Press Tab
 
@@ -118,11 +118,11 @@ term.string("\u001b[H")
 
 Common escape sequences:
 
-| Sequence | Meaning |
-|----------|---------|
-| `\t` | Tab |
-| `\x08` | Backspace |
-| `\u001b[H` | Home |
+Sequence   | Meaning
+---------- | ---------
+`\t`       | Tab
+`\x08`     | Backspace
+`\u001b[H` | Home
 
 If py3270 rejects an escape sequence, it will raise an error explaining why. This prevents accidentally sending invalid control codes that could corrupt the host session.
 
@@ -135,26 +135,26 @@ term = Terminal()
 term.start()
 try:
     term.connect("host.example.com", 23)
-    
+
     # Wait for login screen
     if not term.wait_for("User ID:", timeout=5_000):
         raise RuntimeError("Login screen not found")
-    
+
     # Type username
     term.string("john.doe")
-    
+
     # Tab to password field
     term.tab()
-    
+
     # Type password
     term.string("SecurePassword123")
-    
+
     # Press Enter to submit
     term.enter()
-    
+
     # Wait for host to process login
     term.wait_unlock(timeout=5_000)
-    
+
     # Refresh and check if we're logged in
     term.refresh()
     if term.check("Welcome", 1, 1):
@@ -162,31 +162,10 @@ try:
     else:
         print("Login may have failed")
         print(term.screen())
-        
+
 finally:
     term.disconnect()
     term.stop()
-```
-
-## Comparison with Synchronous vs Historical APIs
-
-py3270 is synchronous: every call blocks until complete. You do not use `await` or `async/await`.
-
-Correct (synchronous):
-
-```python
-term.string("input")
-term.enter()
-term.wait_ready()  # Blocks until ready
-print(term.screen())
-```
-
-Do not attempt (async patterns don't apply):
-
-```python
-# These do NOT work in py3270
-await term.string("input")  # Error: string() is not async
-term.enter()  # Error: await required (it isn't)
 ```
 
 ## Next Steps

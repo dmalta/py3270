@@ -22,16 +22,16 @@ def main() -> None:
     try:
         # Connect to a mainframe
         term.connect("example.mainframe.com", 23)
-        
+
         # Wait for the host to respond
         term.wait_for("READY", timeout=5_000)
-        
+
         # Refresh the screen buffer
         term.refresh()
-        
+
         # Print what you see
         print(term.screen())
-        
+
         # Disconnect
         term.disconnect()
     finally:

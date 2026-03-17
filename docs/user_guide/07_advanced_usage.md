@@ -15,17 +15,17 @@ options = TerminalOptions(
     verbose=True,
     timeout=10_000
 )
-term = Terminal(options)
+term = Term             inal(options)
 ```
 
 ### Configuration Parameters
 
-| Parameter | Type | Default | Purpose |
-|-----------|------|---------|---------|
-| `executable` | `str` | `"s3270"` | Path to s3270 binary; searches PATH if not absolute |
-| `args` | `list[str]` | `[]` | Additional command-line args passed to s3270 |
-| `verbose` | `bool` | `False` | Enable debug logging to stderr |
-| `timeout` | `int` | `30_000` | Default timeout in milliseconds for operations |
+Parameter    | Type        | Default   | Purpose
+------------ | ----------- | --------- | ---------------------------------------------------
+`executable` | `str`       | `"s3270"` | Path to s3270 binary; searches PATH if not absolute
+`args`       | `list[str]` | `[]`      | Additional command-line args passed to s3270
+`verbose`    | `bool`      | `False`   | Enable debug logging to stderr
+`timeout`    | `int`       | `30_000`  | Default timeout in milliseconds for operations
 
 ### Custom Executable Path
 
@@ -113,14 +113,14 @@ print(f"LU Name: {response.data}")
 
 Available settings:
 
-| Setting | Purpose |
-|---------|---------|
-| `TerminalSetting.ConnectionState` | Current connection state |
-| `TerminalSetting.Host` | Connected host name |
-| `TerminalSetting.LuName` | Logical Unit name |
-| `TerminalSetting.Model` | Terminal model number |
-| `TerminalSetting.Encoding` | Character encoding |
-| `TerminalSetting.CodePage` | Code page in use |
+Setting                           | Purpose
+--------------------------------- | ------------------------
+`TerminalSetting.ConnectionState` | Current connection state
+`TerminalSetting.Host`            | Connected host name
+`TerminalSetting.LuName`          | Logical Unit name
+`TerminalSetting.Model`           | Terminal model number
+`TerminalSetting.Encoding`        | Character encoding
+`TerminalSetting.CodePage`        | Code page in use
 
 ## Multiple Sessions with SessionManager
 
@@ -160,13 +160,13 @@ manager.close_all()
 
 ### SessionManager API
 
-| Method | Purpose |
-|--------|---------|
-| `create_session(options, start=False)` | Create a new terminal, optionally start it |
-| `get_session(session_id)` | Retrieve a terminal by ID |
-| `close_session(session_id)` | Close a specific terminal |
-| `close_all()` | Close all managed terminals |
-| `list_sessions()` | Get all session IDs |
+Method                                 | Purpose
+-------------------------------------- | ------------------------------------------
+`create_session(options, start=False)` | Create a new terminal, optionally start it
+`get_session(session_id)`              | Retrieve a terminal by ID
+`close_session(session_id)`            | Close a specific terminal
+`close_all()`                          | Close all managed terminals
+`list_sessions()`                      | Get all session IDs
 
 ## Lifecycle Pattern with try/finally
 
@@ -180,14 +180,14 @@ term = Terminal()
 try:
     term.start()
     term.connect("host.example.com", 23)
-    
+
     # Do work
     term.string("data")
     term.enter()
     term.wait_ready(timeout=5_000)
     term.refresh()
     print(term.screen())
-    
+
 except SessionTimeoutError:
     print("Operation timed out")
     raise
@@ -204,7 +204,7 @@ The `finally` block runs regardless of success or error, ensuring s3270 processe
 
 ## Command Execution Variants
 
-Three methods exist for running commands—choose based on your needs:
+Three methods exist for running commands--choose based on your needs:
 
 ### `command(cmd, timeout=...)`
 
