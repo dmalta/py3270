@@ -1,12 +1,13 @@
 import pytest
 
 from py3270._parser import _ResponseParser, parse_status
-from py3270.types import ConnectionState, EmulatorMode, KeyboardState, TerminalResponse
+from py3270.types import ConnectionState, KeyboardState, TerminalResponse
 
 
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
+
 
 def collect_responses(chunks: list[str]) -> list[TerminalResponse]:
     results: list[TerminalResponse] = []
@@ -20,6 +21,7 @@ def collect_responses(chunks: list[str]) -> list[TerminalResponse]:
 # T2: Response framing tests
 # ---------------------------------------------------------------------------
 
+
 def test_single_chunk_ok() -> None:
     responses = collect_responses(["U F U N I 2 24 80 0 0 0x0 -\nok\n"])
     assert len(responses) == 1
@@ -28,11 +30,7 @@ def test_single_chunk_ok() -> None:
 
 
 def test_single_chunk_with_data() -> None:
-    chunk = (
-        "data: HELLO WORLD                  \n"
-        "U F U C(mvshost:23) I 2 24 80 5 10 0x0 0.042\n"
-        "ok\n"
-    )
+    chunk = "data: HELLO WORLD                  \nU F U C(mvshost:23) I 2 24 80 5 10 0x0 0.042\nok\n"
     responses = collect_responses([chunk])
     assert len(responses) == 1
     assert responses[0].ok is True
@@ -47,9 +45,7 @@ def test_error_response() -> None:
 
 
 def test_data_prefix_stripped() -> None:
-    responses = collect_responses(
-        ["data: some content\nU F U N I 2 24 80 0 0 0x0 -\nok\n"]
-    )
+    responses = collect_responses(["data: some content\nU F U N I 2 24 80 0 0 0x0 -\nok\n"])
     assert responses[0].data == "some content"
 
 
@@ -74,10 +70,7 @@ def test_chunked_split_inside_ok() -> None:
 
 
 def test_two_responses_in_one_chunk() -> None:
-    chunk = (
-        "U F U N I 2 24 80 0 0 0x0 -\nok\n"
-        "U F U N I 2 24 80 0 0 0x0 -\nok\n"
-    )
+    chunk = "U F U N I 2 24 80 0 0 0x0 -\nok\nU F U N I 2 24 80 0 0 0x0 -\nok\n"
     responses = collect_responses([chunk])
     assert len(responses) == 2
 

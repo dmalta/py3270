@@ -49,9 +49,7 @@ class _ResponseParser:
             status = accumulated[-1]
             data_lines = accumulated[:-1]
 
-        stripped = [
-            dl[6:] if dl.startswith("data: ") else dl for dl in data_lines
-        ]
+        stripped = [dl[6:] if dl.startswith("data: ") else dl for dl in data_lines]
         data = "\n".join(stripped)
         raw = accumulated + [terminal_line]
 
@@ -68,6 +66,7 @@ class _ResponseParser:
 # ---------------------------------------------------------------------------
 # Status-line parser
 # ---------------------------------------------------------------------------
+
 
 def parse_status(line: str) -> StatusInfo | None:
     """Parse an s3270 status line and return a :class:`~py3270.types.StatusInfo`.
@@ -140,9 +139,7 @@ def validate_escape_sequences(text: str) -> None:
 
         # We have a backslash at position i.
         if i + 1 >= n:
-            raise ValueError(
-                f"Incomplete escape sequence at position {i}: {repr(text[i:])}"
-            )
+            raise ValueError(f"Incomplete escape sequence at position {i}: {repr(text[i:])}")
 
         next_char = text[i + 1]
 
@@ -156,9 +153,7 @@ def validate_escape_sequences(text: str) -> None:
             # Clamp to at most 4 (greedy match might give more)
             hex_len = min(hex_len, 4)
             if hex_len not in (2, 4):
-                raise ValueError(
-                    f"Invalid EBCDIC escape at position {i}: {repr(text[i : i + 6])}"
-                )
+                raise ValueError(f"Invalid EBCDIC escape at position {i}: {repr(text[i : i + 6])}")
             i += 2 + hex_len
 
         elif next_char in ("u", "x"):
@@ -168,37 +163,25 @@ def validate_escape_sequences(text: str) -> None:
             # Clamp to at most 5
             hex_len = min(hex_len, 5)
             if hex_len < 2:
-                raise ValueError(
-                    f"Invalid Unicode escape at position {i}: {repr(text[i : i + 7])}"
-                )
+                raise ValueError(f"Invalid Unicode escape at position {i}: {repr(text[i : i + 7])}")
             i += 2 + hex_len
 
         elif next_char == "p":
             if i + 2 >= n:
-                raise ValueError(
-                    f"Incomplete \\p escape at position {i}: {repr(text[i:])}"
-                )
+                raise ValueError(f"Incomplete \\p escape at position {i}: {repr(text[i:])}")
             key_type = text[i + 2]
             if key_type == "a":
                 m = _PA.match(text, i + 3)
                 if not m:
-                    raise ValueError(
-                        f"Invalid PA key at position {i}: {repr(text[i : i + 5])}"
-                    )
+                    raise ValueError(f"Invalid PA key at position {i}: {repr(text[i : i + 5])}")
                 i += 3 + (m.end() - (i + 3))
             elif key_type == "f":
                 m = _PF.match(text, i + 3)
                 if not m:
-                    raise ValueError(
-                        f"Invalid PF key at position {i}: {repr(text[i : i + 6])}"
-                    )
+                    raise ValueError(f"Invalid PF key at position {i}: {repr(text[i : i + 6])}")
                 i += 3 + (m.end() - (i + 3))
             else:
-                raise ValueError(
-                    f"Invalid \\p escape at position {i}: {repr(text[i : i + 4])}"
-                )
+                raise ValueError(f"Invalid \\p escape at position {i}: {repr(text[i : i + 4])}")
 
         else:
-            raise ValueError(
-                f"Invalid escape sequence at position {i}: {repr(text[i : i + 2])}"
-            )
+            raise ValueError(f"Invalid escape sequence at position {i}: {repr(text[i : i + 2])}")

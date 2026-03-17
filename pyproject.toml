@@ -37,3 +37,6 @@ packages = ["py3270"]
 testpaths = ["tests"]
 markers = ["integration: requires s3270 binary on PATH"]
 timeout = 10
+
+[tool.ruff]
+line-length = 120

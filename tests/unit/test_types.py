@@ -58,7 +58,19 @@ def test_terminal_mode_members(member: str) -> None:
 @pytest.mark.parametrize(
     ("enum_cls", "expected"),
     [
-        (TerminalSetting, ["ConnectionState", "Host", "LuName", "Model", "Encoding", "CodePage", "Aid", "BindPluName"]),
+        (
+            TerminalSetting,
+            [
+                "ConnectionState",
+                "Host",
+                "LuName",
+                "Model",
+                "Encoding",
+                "CodePage",
+                "Aid",
+                "BindPluName",
+            ],
+        ),
         (StatusFlag, ["Formatted", "KeyboardLock", "Printer", "Secure", "Tn3270e"]),
         (KeyboardState, ["U", "L", "E"]),
         (ScreenFormatting, ["F", "U"]),

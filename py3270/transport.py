@@ -25,9 +25,7 @@ def _build_response(lines: list[str], terminal_line: str) -> TerminalResponse:
         status = lines[-1]
         data_lines = lines[:-1]
 
-    stripped = [
-        line[6:] if line.startswith("data: ") else line for line in data_lines
-    ]
+    stripped = [line[6:] if line.startswith("data: ") else line for line in data_lines]
     return TerminalResponse(
         ok=(terminal_line == "ok"),
         data="\n".join(stripped),

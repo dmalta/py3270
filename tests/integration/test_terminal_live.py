@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-from py3270 import SessionState, Terminal, TerminalOptions, TerminalSetting
+from py3270 import SessionState, Terminal, TerminalOptions
 from py3270._parser import parse_status
 from tests.integration.conftest import DEMO_HOST, DEMO_PORT
 

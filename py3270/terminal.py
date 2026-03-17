@@ -154,9 +154,7 @@ class Terminal:
     def run_step(self, cmd: str, *, timeout: int | None = None) -> TerminalResponse:
         return self.command(cmd, timeout=timeout)
 
-    def run_workflow(
-        self, commands: list[str], *, timeout: int | None = None
-    ) -> list[TerminalResponse]:
+    def run_workflow(self, commands: list[str], *, timeout: int | None = None) -> list[TerminalResponse]:
         return [self.command(cmd, timeout=timeout) for cmd in commands]
 
     # ------------------------------------------------------------------
@@ -247,9 +245,7 @@ class Terminal:
         result = line[col - 1 : col - 1 + length]
         return result.rstrip() if trim else result
 
-    def write(
-        self, text: str, row: int, col: int, length: int | None = None
-    ) -> TerminalResponse:
+    def write(self, text: str, row: int, col: int, length: int | None = None) -> TerminalResponse:
         if length is not None:
             text = text[:length].rjust(length)
         self.move(row, col)
