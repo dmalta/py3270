@@ -7,7 +7,7 @@ This chapter covers configuration, orchestration, and diagnostic features for ex
 When creating a Terminal, you can customize behavior using `TerminalOptions`:
 
 ```python
-from py3270 import Terminal, TerminalOptions
+from ibm3270 import Terminal, TerminalOptions
 
 options = TerminalOptions(
     executable="/usr/local/bin/s3270",
@@ -92,7 +92,7 @@ term.wait_for("READY", timeout=5_000)  # Override to 5 seconds
 Use `query()` to request configuration information:
 
 ```python
-from py3270 import TerminalSetting
+from ibm3270 import TerminalSetting
 
 term = Terminal()
 term.start()
@@ -127,7 +127,7 @@ Setting                           | Purpose
 For applications that need multiple simultaneous sessions, use `SessionManager`:
 
 ```python
-from py3270 import SessionManager, TerminalOptions
+from ibm3270 import SessionManager, TerminalOptions
 
 # Create a manager
 manager = SessionManager()
@@ -173,7 +173,7 @@ Method                                 | Purpose
 Always use `try/finally` to ensure cleanup:
 
 ```python
-from py3270 import Terminal, SessionTimeoutError
+from ibm3270 import Terminal, SessionTimeoutError
 
 term = Terminal()
 

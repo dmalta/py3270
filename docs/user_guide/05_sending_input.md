@@ -7,7 +7,7 @@ This chapter covers how to interact with 3270 screens by typing text and pressin
 Use `string(text)` to send text to the current cursor position:
 
 ```python
-from py3270 import Terminal
+from ibm3270 import Terminal
 
 term = Terminal()
 term.start()
@@ -103,7 +103,7 @@ This is rarely used in normal workflows but exists for completeness.
 
 ## Control Characters and Escape Sequences
 
-Some terminal interactions require special characters. py3270 supports escape sequences for these:
+Some terminal interactions require special characters. ibm3270 supports escape sequences for these:
 
 ```python
 # Send backspace
@@ -124,12 +124,12 @@ Sequence   | Meaning
 `\x08`     | Backspace
 `\u001b[H` | Home
 
-If py3270 rejects an escape sequence, it will raise an error explaining why. This prevents accidentally sending invalid control codes that could corrupt the host session.
+If ibm3270 rejects an escape sequence, it will raise an error explaining why. This prevents accidentally sending invalid control codes that could corrupt the host session.
 
 ## Practical Example: Login Flow
 
 ```python
-from py3270 import Terminal
+from ibm3270 import Terminal
 
 term = Terminal()
 term.start()

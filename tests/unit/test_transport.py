@@ -8,8 +8,8 @@ from unittest.mock import patch
 
 import pytest
 
-from py3270.errors import SessionBusyError, SessionProcessError, SessionTimeoutError
-from py3270.transport import _EOF, Transport
+from ibm3270.errors import SessionBusyError, SessionProcessError, SessionTimeoutError
+from ibm3270.transport import _EOF, Transport
 
 
 class _MockStdin:

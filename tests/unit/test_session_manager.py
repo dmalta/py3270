@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from py3270 import SessionManager, Terminal
+from ibm3270 import SessionManager, Terminal
 
 
 def test_create_get_list_close_session() -> None:

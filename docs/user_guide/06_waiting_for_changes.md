@@ -1,6 +1,6 @@
 # Waiting for Changes
 
-This chapter covers how to coordinate with asynchronous host responses using py3270's waiting helpers.
+This chapter covers how to coordinate with asynchronous host responses using ibm3270's waiting helpers.
 
 ## Why Waiting Matters
 
@@ -131,7 +131,7 @@ except SessionTimeoutError:
 Here's a robust pattern for sending input and reading results:
 
 ```python
-from py3270 import Terminal, SessionTimeoutError
+from ibm3270 import Terminal, SessionTimeoutError
 
 term = Terminal()
 term.start()

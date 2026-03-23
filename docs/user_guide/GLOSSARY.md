@@ -1,6 +1,6 @@
 # Glossary
 
-This document defines key terms used throughout the py3270 user guide.
+This document defines key terms used throughout the ibm3270 user guide.
 
 ## 3270 Terminal
 
@@ -20,7 +20,7 @@ An extended version of TN3270 that adds support for additional features like scr
 
 ## s3270
 
-A command-line 3270 terminal emulator developed by Paul Mattes. It implements the 3270 protocol and can connect to mainframe systems. The `s3270` program is scriptable, making it ideal for automation. py3270 drives s3270 from Python.
+A command-line 3270 terminal emulator developed by Paul Mattes. It implements the 3270 protocol and can connect to mainframe systems. The `s3270` program is scriptable, making it ideal for automation. ibm3270 drives s3270 from Python.
 
 ## x3270 Suite
 
@@ -30,15 +30,15 @@ A collection of 3270 terminal emulators including:
 - `s3270`: a scriptable terminal emulator
 - `c3270`: a curses-based terminal
 
-py3270 specifically automates `s3270`.
+ibm3270 specifically automates `s3270`.
 
 ## Screen Buffer
 
-The in-memory representation of the 3270 screen as displayed to the user. The screen is typically 24 rows by 80 columns of text. After each command, py3270 caches the screen buffer locally so you can read it without sending additional queries to the host.
+The in-memory representation of the 3270 screen as displayed to the user. The screen is typically 24 rows by 80 columns of text. After each command, ibm3270 caches the screen buffer locally so you can read it without sending additional queries to the host.
 
 ## Refresh
 
-The action of retrieving the current screen display from the terminal emulator and updating the cached screen buffer. You must call `refresh()` before reading screen data in py3270.
+The action of retrieving the current screen display from the terminal emulator and updating the cached screen buffer. You must call `refresh()` before reading screen data in ibm3270.
 
 ## Keyboard Lock
 
@@ -77,11 +77,11 @@ The current connectivity status of the Terminal:
 
 ## EBCDIC
 
-Extended Binary Coded Decimal Interchange Code--the character encoding used by IBM mainframes. py3270 and s3270 handle EBCDIC translation automatically.
+Extended Binary Coded Decimal Interchange Code--the character encoding used by IBM mainframes. ibm3270 and s3270 handle EBCDIC translation automatically.
 
 ## Escape Sequence
 
-A special text sequence used to send non-printable characters or control codes to the terminal. For example, `\u001b[H` might represent the Home key. py3270 validates escape sequences before sending them.
+A special text sequence used to send non-printable characters or control codes to the terminal. For example, `\u001b[H` might represent the Home key. ibm3270 validates escape sequences before sending them.
 
 ## Formatted Screen
 

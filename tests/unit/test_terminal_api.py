@@ -9,17 +9,17 @@ from unittest.mock import patch
 
 import pytest
 
-from py3270 import (
+from ibm3270 import (
     SessionBusyError,
     SessionProcessError,
     SessionState,
     SessionTimeoutError,
     Terminal,
 )
-from py3270 import transport as transport_module
-from py3270 import field
-from py3270.types import TerminalOptions
-from py3270.types import (
+from ibm3270 import transport as transport_module
+from ibm3270 import field
+from ibm3270.types import TerminalOptions
+from ibm3270.types import (
     ConnectionState,
     EmulatorMode,
     FieldDefinition,

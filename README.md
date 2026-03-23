@@ -1,8 +1,8 @@
-# py3270
+# ibm3270
 
 Python wrapper for the s3270 IBM 3270 terminal emulator.
 
-`py3270` provides a synchronous, testable API for automating TN3270 terminal workflows from Python.
+`ibm3270` provides a synchronous, testable API for automating TN3270 terminal workflows from Python.
 
 ## Features
 
@@ -20,15 +20,15 @@ Python wrapper for the s3270 IBM 3270 terminal emulator.
 
 ## What Is s3270?
 
-`s3270` is the scriptable command-line emulator from the x3270 suite. It implements the TN3270/TN3270E protocol and exposes terminal operations (connect, read screen, send keys) in a way automation tools can drive. `py3270` uses `s3270` as its execution engine and provides a clean Python API on top.
+`s3270` is the scriptable command-line emulator from the x3270 suite. It implements the TN3270/TN3270E protocol and exposes terminal operations (connect, read screen, send keys) in a way automation tools can drive. `ibm3270` uses `s3270` as its execution engine and provides a clean Python API on top.
 
 ## Installation
 
 ### Install from source
 
 ```bash
-git clone https://github.com/dmalta/py3270.git
-cd py3270
+git clone https://github.com/dmalta/ibm3270.git
+cd ibm3270
 pip install .
 ```
 
@@ -44,7 +44,7 @@ See the full platform-specific setup guide in [docs/user_guide/01_installation.m
 ## Quickstart
 
 ```python
-from py3270 import Terminal
+from ibm3270 import Terminal
 
 
 def main() -> None:
@@ -76,13 +76,13 @@ if __name__ == "__main__":
 - [Advanced Usage](docs/user_guide/07_advanced_usage.md)
 - [Troubleshooting](docs/user_guide/08_troubleshooting.md)
 - [Glossary](docs/user_guide/GLOSSARY.md)
-- [API Reference](../api_reference/py3270.html)
+- [API Reference](../api_reference/ibm3270.html)
 
 ## Additional Documentation
 
 - [Full API and architecture notes](docs/S3270_WRAPPER_FULL_DOCUMENTATION.md)
 - [s3270 manual page](docs/s3270_Manual_Page.md)
-- [Technical design document](docs/tdd_py3270.md)
+- [Technical design document](docs/tdd_ibm3270.md)
 
 ## References
 

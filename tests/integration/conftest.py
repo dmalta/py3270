@@ -6,7 +6,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from py3270 import SessionManager, Terminal, TerminalOptions
+from ibm3270 import SessionManager, Terminal, TerminalOptions
 
 
 @pytest.fixture(scope="session", name="s3270_path")
@@ -42,5 +42,5 @@ def session_manager() -> Iterator[SessionManager]:
         manager.close_all()
 
 
-DEMO_HOST = os.environ.get("PY3270_DEMO_HOST", "")
-DEMO_PORT = int(os.environ.get("PY3270_DEMO_PORT", "23"))
+DEMO_HOST = os.environ.get("ibm3270_DEMO_HOST", "")
+DEMO_PORT = int(os.environ.get("ibm3270_DEMO_PORT", "23"))

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from py3270.types import TerminalResponse
+from ibm3270.types import TerminalResponse
 
 
 def make_response(data: str = "", ok: bool = True) -> TerminalResponse:

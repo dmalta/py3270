@@ -1,6 +1,6 @@
 # Introduction
 
-Welcome to py3270! This guide will teach you how to automate IBM mainframe interactions from Python.
+Welcome to ibm3270! This guide will teach you how to automate IBM mainframe interactions from Python.
 
 ## What Is a 3270 Terminal?
 
@@ -28,7 +28,7 @@ The flow is:
 ```
 Your Python Code
     ↓
-py3270 library
+ibm3270 library
     ↓
 s3270 terminal emulator
     ↓
@@ -39,13 +39,13 @@ Mainframe Host
 
 Here's what happens at each layer:
 
-1. **Your Python code** calls py3270 methods like `connect()`, `string()`, and `refresh()`
-2. **py3270** translates your commands into s3270 control commands and sends them to the local `s3270` process
+1. **Your Python code** calls ibm3270 methods like `connect()`, `string()`, and `refresh()`
+2. **ibm3270** translates your commands into s3270 control commands and sends them to the local `s3270` process
 3. **s3270** speaks the TN3270 protocol fluently and sends commands to the mainframe host over the network
-4. **s3270** receives responses from the mainframe, parses them, and presents screen data back to py3270
-5. **py3270** caches the screen and makes it available to your code
+4. **s3270** receives responses from the mainframe, parses them, and presents screen data back to ibm3270
+5. **ibm3270** caches the screen and makes it available to your code
 
-This layered approach means py3270 doesn't need to implement the TN3270 protocol itself--it delegates that work to the well-maintained s3270 emulator.
+This layered approach means ibm3270 doesn't need to implement the TN3270 protocol itself--it delegates that work to the well-maintained s3270 emulator.
 
 ## Why Python Matters Here
 
@@ -58,12 +58,12 @@ Automating 3270 terminal interactions is useful for:
 
 Python makes this automation accessible. Instead of writing shell scripts or VBScript macros, you write clear, readable Python code that interacts with the mainframe just as a human operator would--but faster and without errors.
 
-## The py3270 Synchronous API
+## The ibm3270 Synchronous API
 
-py3270 exposes a **synchronous** session API. All operations block until complete:
+ibm3270 exposes a **synchronous** session API. All operations block until complete:
 
 ```python
-from py3270 import Terminal
+from ibm3270 import Terminal
 
 term = Terminal()
 term.start()
@@ -81,7 +81,7 @@ There is no `await`, no async/await complexity. Code runs line by line, making i
 
 This guide covers:
 
-1. **Installation**: Get s3270 and py3270 running on your system
+1. **Installation**: Get s3270 and ibm3270 running on your system
 2. **Quickstart**: Run your first automation script
 3. **Connecting**: Establish and manage connections to mainframe hosts
 4. **Reading screens**: Extract data and find text on the screen

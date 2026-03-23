@@ -1,10 +1,10 @@
 # Quickstart
 
-Let's write your first py3270 automation script.
+Let's write your first ibm3270 automation script.
 
 ## Prerequisites
 
-- py3270 and s3270 are installed (see [Installation](01_installation.md))
+- ibm3270 and s3270 are installed (see [Installation](01_installation.md))
 - You have access to a TN3270 host (or you can test with a public demo if available)
 
 ## Your First Script
@@ -12,7 +12,7 @@ Let's write your first py3270 automation script.
 Create a file called `quickstart.py`:
 
 ```python
-from py3270 import Terminal
+from ibm3270 import Terminal
 
 
 def main() -> None:

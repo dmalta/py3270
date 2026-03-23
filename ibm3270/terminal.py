@@ -1,18 +1,17 @@
 from __future__ import annotations
 
-__docformat__ = "google"
-
 import logging
 import time
 from uuid import uuid4
 
-from py3270._parser import parse_status, validate_escape_sequences
-from py3270.transport import Transport
-from py3270.errors import (
+from ibm3270._parser import parse_status, validate_escape_sequences
+from ibm3270.transport import Transport
+from ibm3270.errors import (
     SessionDisconnectedError,
     SessionProcessError,
+    SessionTimeoutError,
 )
-from py3270.types import (
+from ibm3270.types import (
     EmulatorMode,
     FieldDefinition,
     FieldDefinitionRecord,
@@ -229,6 +228,7 @@ class Terminal:
         if mode:
             addr = f"{mode.value}:{addr}"
         resp = self.command(f"Connect({addr})")
+        self.refresh()
         self._connected = resp.ok
         if self._connected:
             self._state = SessionState.Connected
@@ -311,7 +311,7 @@ class Terminal:
         Returns:
             `TerminalResponse` from the `Ascii1()` command.
         """
-        self.wait_ready()
+        self.wait_unlock()
         resp = self.command("Ascii1()")
         self._screen_buffer = resp.data.splitlines()
         return resp
@@ -346,7 +346,11 @@ class Terminal:
         result = line[col - 1 : col - 1 + length]
         return result.rstrip() if trim else result
 
-    def write(self, text: str, row: int, col: int, length: int | None = None) -> TerminalResponse:
+    def line(self, row: int) -> str:
+        """Return the full text of a given 1-based row, or `""` if out of range."""
+        return self.read(row, 1, len(self._screen_buffer[row - 1]) if 1 <= row <= len(self._screen_buffer) else 0)  
+        
+    def write(self, text: str, row: int | None = None, col: int | None = None, length: int | None = None) -> TerminalResponse:
         """Move the cursor then type *text* with `String()`.
 
         Args:
@@ -356,19 +360,28 @@ class Terminal:
             length: If provided, right-justify *text* in a field of this width.
         """
         if length is not None:
-            text = text[:length].rjust(length)
-        self.move(row, col)
+            text = text[:length].ljust(length)
+        if row is not None and col is not None:
+            self.move(row, col)
         return self.string(text)
 
-    def check(self, text: str, row: int, col: int) -> bool:
-        """Return `True` if *text* appears at the given screen position.
+    def find(self, text: str, row: int | None = None, col: int | None = None) -> bool:
+        """Return `True` if *text* appears at the given screen position, or
+        anywhere on the screen if *row* and *col* are omitted.
 
         Args:
             text: Expected string.
-            row: 1-based row.
-            col: 1-based column.
+            row: 1-based row. Must be paired with *col*.
+            col: 1-based column. Must be paired with *row*.
+
+        Raises:
+            ValueError: If only one of *row* / *col* is provided.
         """
-        return self.read(row, col, len(text)) == text
+        if (row is None) != (col is None):
+            raise ValueError("both row and col must be provided, or neither")
+        if row is not None:
+            return self.read(row, col, len(text)) == text
+        return text in self.screen()
 
     def read_many(self, fields: list[FieldDefinition]) -> FieldDefinitionRecord:
         """Refresh the screen and read multiple fields in one call.
@@ -408,7 +421,7 @@ class Terminal:
             ValueError: If *text* contains an invalid s3270 escape sequence.
         """
         validate_escape_sequences(text)
-        return self.command(f"String({text})")
+        return self.command(f"String(\"{text}\")")
 
     def send_text(self, text: str) -> TerminalResponse:
         """Alias for `string`."""
@@ -429,8 +442,14 @@ class Terminal:
         return self.command("Tab")
 
     def clear(self) -> TerminalResponse:
-        """Press the Clear key and refresh the screen."""
+        """Press the Clear key and refresh the screen. It sends a Clear AID to the host, and waits for the host to unlock the keyboard before returning."""
         response = self.command("Clear")
+        self.refresh()
+        return response
+
+    def erase_input(self) -> TerminalResponse:
+        """Press the Erase Input key, replacing all modifiable fields with NUL characters, and refresh the screen."""
+        response = self.command("EraseInput()")
         self.refresh()
         return response
 
@@ -483,10 +502,6 @@ class Terminal:
         self.refresh()
         return self.screen()
 
-    def scrape(self, row: int, col: int, length: int, trim: bool = True) -> str:
-        """Alias for `read`."""
-        return self.read(row, col, length, trim=trim)
-
     # ------------------------------------------------------------------
     # Wait helpers
     # ------------------------------------------------------------------
@@ -531,7 +546,7 @@ class Terminal:
         text: str,
         row: int | None = None,
         col: int | None = None,
-        timeout: int = 30_000,
+        timeout: int = 5_000
     ) -> bool:
         """Poll the screen until *text* appears, or *timeout* elapses.
 
@@ -539,10 +554,10 @@ class Terminal:
             text: The string to watch for.
             row: 1-based row to check. Must be paired with *col*.
             col: 1-based column to check. Must be paired with *row*.
-            timeout: Total wait time in milliseconds (capped at 300 000). Defaults to 30 000.
+            timeout: Total wait time in milliseconds (capped at 300 000). Defaults to 5 000.
 
         Returns:
-            ``True`` if *text* was found before the deadline, ``False`` otherwise.
+            ``True`` if *text* was found before the deadline or ``False`` if not.
 
         Raises:
             ValueError: If only one of *row* / *col* is provided.
@@ -553,11 +568,23 @@ class Terminal:
         deadline = time.monotonic() + timeout / 1000
         while time.monotonic() < deadline:
             self.refresh()
-            if row is not None:
-                if self.read(row, col, len(text)) == text:  # type: ignore[arg-type]
-                    return True
-            else:
-                if text in self.screen():
-                    return True
+            if self.find(text, row, col):
+                return True
             time.sleep(0.1)
+
         return False
+
+    def expect(
+        self,
+        text: str,
+        row: int | None = None,
+        col: int | None = None,
+        timeout: int = 5_000,
+        error_message: str = None
+    ) -> None:
+        """Like `wait_for`, but raises `SessionTimeoutError` if the text is not found."""
+        if not self.wait_for(text, row=row, col=col, timeout=timeout):
+            if error_message is None:
+                error_message = f"Timed out waiting for '{text}' to appear on screen " + \
+                    f"(row={row if row is not None else '(any)'}, col={col if col is not None else '(any)'}, timeout={timeout}ms)"
+            raise SessionTimeoutError(error_message)

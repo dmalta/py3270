@@ -1,6 +1,6 @@
 # Reading the Screen
 
-This chapter covers how to extract data from 3270 screens using py3270.
+This chapter covers how to extract data from 3270 screens using ibm3270.
 
 ## The Screen Coordinate System
 
@@ -20,7 +20,7 @@ Row 24:   | Press PF3 to exit                                       |
 Before you can read screen data, you must call `refresh()` to update the cached screen buffer:
 
 ```python
-from py3270 import Terminal
+from ibm3270 import Terminal
 
 term = Terminal()
 term.start()
@@ -33,7 +33,7 @@ term.refresh()
 screen = term.screen()
 ```
 
-> **Why refresh?** The s3270 process maintains the screen internally. py3270 caches a copy locally so you can access it repeatedly without querying the host. `refresh()` synchronizes the cache.
+> **Why refresh?** The s3270 process maintains the screen internally. ibm3270 caches a copy locally so you can access it repeatedly without querying the host. `refresh()` synchronizes the cache.
 
 ## Get the Entire Screen
 
@@ -116,7 +116,7 @@ if term.read(24, 1, 2) == "OK":
 When you need to extract many fields, use `read_many()` with a list of `FieldDefinition` objects:
 
 ```python
-from py3270 import FieldDefinition
+from ibm3270 import FieldDefinition
 
 term.refresh()
 
@@ -156,7 +156,7 @@ If `name` is set, results use that as the dictionary key. Otherwise they fall ba
 > **Shorthand**: The `field()` helper accepts the same arguments positionally, which is more compact for long field lists:
 >
 > ```python
-> from py3270 import field
+> from ibm3270 import field
 >
 > fields = [
 >     field(2, 12, 8, name="user_id"),

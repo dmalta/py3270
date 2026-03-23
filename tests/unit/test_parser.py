@@ -1,7 +1,7 @@
 import pytest
 
-from py3270._parser import _ResponseParser, parse_status
-from py3270.types import ConnectionState, KeyboardState, TerminalResponse
+from ibm3270._parser import _ResponseParser, parse_status
+from ibm3270.types import ConnectionState, KeyboardState, TerminalResponse
 
 
 # ---------------------------------------------------------------------------

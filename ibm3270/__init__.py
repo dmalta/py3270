@@ -1,4 +1,4 @@
-from py3270.errors import (
+from ibm3270.errors import (
     SessionBusyError,
     SessionDisconnectedError,
     SessionError,
@@ -6,10 +6,10 @@ from py3270.errors import (
     SessionTimeoutError,
     UnexpectedScreenError,
 )
-from py3270.session_manager import SessionManager
-from py3270.terminal import Terminal
-from py3270.transport import Transport
-from py3270.types import (
+from ibm3270.session_manager import SessionManager
+from ibm3270.terminal import Terminal
+from ibm3270.transport import Transport
+from ibm3270.types import (
     ConnectionState,
     EmulatorMode,
     FieldDefinition,

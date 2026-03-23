@@ -1,6 +1,6 @@
 import pytest
 
-from py3270._parser import validate_escape_sequences
+from ibm3270._parser import validate_escape_sequences
 
 
 # ---------------------------------------------------------------------------

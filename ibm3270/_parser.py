@@ -5,7 +5,7 @@ __docformat__ = "google"
 import re
 from typing import Callable
 
-from py3270.types import (
+from ibm3270.types import (
     ConnectionState,
     EmulatorMode,
     FieldProtection,
@@ -18,7 +18,7 @@ from py3270.types import (
 
 class _ResponseParser:
     """Stateful parser that buffers s3270 stdout chunks and emits complete
-    :class:`~py3270.types.TerminalResponse` objects via a callback."""
+    :class:`~ibm3270.types.TerminalResponse` objects via a callback."""
 
     def __init__(self, on_complete: Callable[[TerminalResponse], None]) -> None:
         self._on_complete = on_complete
@@ -71,7 +71,7 @@ class _ResponseParser:
 
 
 def parse_status(line: str) -> StatusInfo | None:
-    """Parse an s3270 status line and return a :class:`~py3270.types.StatusInfo`.
+    """Parse an s3270 status line and return a :class:`~ibm3270.types.StatusInfo`.
 
     Returns ``None`` for empty, short, or structurally invalid lines so callers
     can safely skip without crashing.

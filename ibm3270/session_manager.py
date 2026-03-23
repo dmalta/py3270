@@ -5,8 +5,8 @@ __docformat__ = "google"
 from threading import Lock
 from uuid import uuid4
 
-from py3270.terminal import Terminal
-from py3270.types import TerminalOptions
+from ibm3270.terminal import Terminal
+from ibm3270.types import TerminalOptions
 
 
 class SessionManager:

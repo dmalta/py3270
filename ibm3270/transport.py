@@ -8,13 +8,13 @@ import threading
 import time
 from typing import IO
 
-from py3270.errors import (
+from ibm3270.errors import (
     SessionBusyError,
     SessionDisconnectedError,
     SessionProcessError,
     SessionTimeoutError,
 )
-from py3270.types import TerminalResponse
+from ibm3270.types import TerminalResponse
 
 _EOF = object()
 

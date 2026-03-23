@@ -4,8 +4,8 @@ import time
 
 import pytest
 
-from py3270 import SessionState, Terminal, TerminalOptions
-from py3270._parser import parse_status
+from ibm3270 import SessionState, Terminal, TerminalOptions
+from ibm3270._parser import parse_status
 from tests.integration.conftest import DEMO_HOST, DEMO_PORT
 
 
@@ -119,7 +119,7 @@ def test_wait_ready_completes_on_idle(terminal) -> None:
 # =====================================================================
 
 
-@pytest.mark.skipif(not DEMO_HOST, reason="PY3270_DEMO_HOST not set")
+@pytest.mark.skipif(not DEMO_HOST, reason="ibm3270_DEMO_HOST not set")
 def test_live_connect_and_disconnect(terminal) -> None:
     connect_response = terminal.connect(DEMO_HOST, DEMO_PORT)
     assert connect_response.ok is True

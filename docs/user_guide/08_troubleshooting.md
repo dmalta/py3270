@@ -1,6 +1,6 @@
 # Troubleshooting
 
-This chapter covers diagnosing and fixing common problems with py3270.
+This chapter covers diagnosing and fixing common problems with ibm3270.
 
 ## s3270 Not Found
 
@@ -39,7 +39,7 @@ This chapter covers diagnosing and fixing common problems with py3270.
 4. **Use absolute path** (temporary workaround):
 
   ```python
-  from py3270 import Terminal, TerminalOptions
+  from ibm3270 import Terminal, TerminalOptions
 
   options = TerminalOptions(
       executable="/usr/local/bin/s3270"
@@ -56,7 +56,7 @@ This chapter covers diagnosing and fixing common problems with py3270.
 **Solution**:
 
 ```python
-from py3270 import Terminal
+from ibm3270 import Terminal
 
 term = Terminal()
 term.start()  # Always start first!
@@ -98,7 +98,7 @@ term.connect("host.example.com", 23)
 5. **Add verbose logging**:
 
   ```python
-  from py3270 import TerminalOptions
+  from ibm3270 import TerminalOptions
 
   options = TerminalOptions(verbose=True)
   term = Terminal(options)
@@ -116,7 +116,7 @@ term.connect("host.example.com", 23)
 1. **Increase timeout**:
 
   ```python
-  from py3270 import TerminalOptions
+  from ibm3270 import TerminalOptions
 
   # Set global timeout to 20 seconds
   options = TerminalOptions(timeout=20_000)
@@ -262,38 +262,38 @@ user_id = term.read(2, 12, 8)
 
 **Error**: `read()` returns data from wrong position.
 
-**Cause**: Pyth ons are 0-indexed, but py3270 uses 1-indexed 3270 coordinates.
+**Cause**: Pyth ons are 0-indexed, but ibm3270 uses 1-indexed 3270 coordinates.
 
 **Example**:
 
 ```python
 # Screen: "Welcome" at visual position top-left
-# py3270 uses 1-indexed: row 1, col 1
+# ibm3270 uses 1-indexed: row 1, col 1
 term.read(1, 1, 7)  # Get "Welcome"
 
 # Do NOT use 0
 term.read(0, 0, 7)  # Wrong: gets out-of-bounds
 ```
 
-## py3270 Import Fails
+## ibm3270 Import Fails
 
-**Error**: `ModuleNotFoundError: No module named 'py3270'`
+**Error**: `ModuleNotFoundError: No module named 'ibm3270'`
 
-**Cause**: py3270 not installed in your Python environment.
+**Cause**: ibm3270 not installed in your Python environment.
 
 **Solutions**:
 
-1. **Install py3270**:
+1. **Install ibm3270**:
 
   ```bash
-  pip install py3270
+  pip install ibm3270
   ```
 
 2. **Check environment**:
 
   ```bash
   which python  # Or 'where python' on Windows
-  python -m pip list | grep py3270
+  python -m pip list | grep ibm3270
   ```
 
 3. **Use correct virtual environment**:
@@ -301,7 +301,7 @@ term.read(0, 0, 7)  # Wrong: gets out-of-bounds
   ```bash
   source env/bin/activate  # Linux/macOS
   env\Scripts\activate     # Windows
-  pip install py3270
+  pip install ibm3270
   python your_script.py
   ```
 

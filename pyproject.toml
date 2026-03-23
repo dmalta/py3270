@@ -3,10 +3,12 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "py3270"
-version = "0.1.0"
+name = "ibm3270"
+version = "0.1.2"
 description = "Python wrapper for the s3270 IBM 3270 terminal emulator"
 readme = "README.md"
+authors = [{ name = "Daniel Maltarollo", email = "daniel@maltarollo.net" }]
+license = { text = "MIT" }
 requires-python = ">=3.11"
 keywords = ["3270", "mainframe", "host", "black screen", "green screen", "tn3270", "automation", "terminal", "s3270"]
 classifiers = [
@@ -19,8 +21,14 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
     "Topic :: System :: Networking",
     "Topic :: Terminals",
+    "Topic :: Terminals :: Terminal Emulators/X Terminals"
 ]
-dependencies = []
+dependencies = [
+    "build>=1.4.0",
+    "hatch>=1.16.5",
+    "pdoc>=16.0.0",
+    "twine>=6.2.0",
+]
 
 [project.optional-dependencies]
 docs = ["pdoc"]
@@ -34,7 +42,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["py3270"]
+packages = ["ibm3270"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

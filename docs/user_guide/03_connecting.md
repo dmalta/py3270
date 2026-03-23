@@ -20,7 +20,7 @@ State            | Meaning
 Use the `state` property and `available()` method to check terminal status:
 
 ```python
-from py3270 import Terminal, SessionState
+from ibm3270 import Terminal, SessionState
 
 term = Terminal()
 term.start()
@@ -44,7 +44,7 @@ print(term.available())  # Output: False
 Use the `connect()` method to initiate a connection:
 
 ```python
-from py3270 import Terminal
+from ibm3270 import Terminal
 
 term = Terminal()
 term.start()
@@ -63,7 +63,7 @@ Parameter  | Type  | Description
 Some hosts require a specific connection mode. Use the optional `mode` parameter:
 
 ```python
-from py3270 import Terminal, TerminalMode
+from ibm3270 import Terminal, TerminalMode
 
 term = Terminal()
 term.start()
@@ -91,7 +91,7 @@ A **Logical Unit (LU) name** is an identifier for a specific terminal session. S
 If you need to use a specific LU name:
 
 ```python
-from py3270 import Terminal
+from ibm3270 import Terminal
 
 term = Terminal()
 term.start()
@@ -152,7 +152,7 @@ term.connect("other.host.com", 23)  # Works fine
 ## Full Lifecycle Example
 
 ```python
-from py3270 import Terminal, SessionState
+from ibm3270 import Terminal, SessionState
 
 term = Terminal()
 

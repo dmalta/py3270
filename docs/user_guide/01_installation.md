@@ -1,10 +1,10 @@
 # Installation
 
-This chapter guides you through installing both s3270 and py3270.
+This chapter guides you through installing both s3270 and ibm3270.
 
 ## Install s3270
 
-py3270 requires `s3270`--the scriptable terminal emulator. Choose your platform below.
+ibm3270 requires `s3270`--the scriptable terminal emulator. Choose your platform below.
 
 ### macOS
 
@@ -59,7 +59,7 @@ If you installed to the default location (`C:\Program Files\x3270`), the full pa
 C:\Program Files\x3270\s3270.exe
 ```
 
-If you installed to another location, adjust the path accordingly. You will tell py3270 where to find `s3270` when creating a Terminal.
+If you installed to another location, adjust the path accordingly. You will tell ibm3270 where to find `s3270` when creating a Terminal.
 
 ## Verify s3270
 
@@ -77,12 +77,12 @@ If you installed s3270 to a non-standard location on Windows, use the full path:
 "C:\Program Files\x3270\s3270.exe" -h
 ```
 
-## Install py3270
+## Install ibm3270
 
-Install py3270 from PyPI using pip:
+Install ibm3270 from PyPI using pip:
 
 ```bash
-pip install py3270
+pip install ibm3270
 ```
 
 Or, if you are using a virtual environment (recommended):
@@ -90,17 +90,17 @@ Or, if you are using a virtual environment (recommended):
 ```bash
 python -m venv env
 source env/bin/activate  # On Windows: env\Scripts\activate
-pip install py3270
+pip install ibm3270
 ```
 
-## Verify py3270
+## Verify ibm3270
 
 Create a test file called `test_install.py`:
 
 ```python
-from py3270 import Terminal
+from ibm3270 import Terminal
 
-print(f"py3270 imported successfully!")
+print(f"ibm3270 imported successfully!")
 print(f"Terminal class: {Terminal}")
 ```
 
@@ -113,11 +113,11 @@ python test_install.py
 You should see:
 
 ```
-py3270 imported successfully!
-Terminal class: <class 'py3270.terminal.Terminal'>
+ibm3270 imported successfully!
+Terminal class: <class 'ibm3270.terminal.Terminal'>
 ```
 
-If you encounter import errors, make sure py3270 is installed in your active Python environment.
+If you encounter import errors, make sure ibm3270 is installed in your active Python environment.
 
 ## Troubleshooting
 
@@ -129,10 +129,10 @@ If you see an error like "s3270: command not found" or "executable not found: s3
 
 1. **Ensure it is installed**: Re-run the platform-specific install command above.
 2. **Add to PATH**: Add the installation directory to your system PATH environment variable.
-3. **Use the full path**: When creating a py3270 Terminal, provide the full path to s3270:
+3. **Use the full path**: When creating a ibm3270 Terminal, provide the full path to s3270:
 
   ```python
-  from py3270 import Terminal, TerminalOptions
+  from ibm3270 import Terminal, TerminalOptions
 
   options = TerminalOptions(executable="C:\\Program Files\\x3270\\s3270.exe")
   term = Terminal(options)
@@ -141,17 +141,17 @@ If you see an error like "s3270: command not found" or "executable not found: s3
 
 ### Python import errors
 
-If `import py3270` fails:
+If `import ibm3270` fails:
 
-1. Confirm py3270 is installed: `pip list | grep py3270`
+1. Confirm ibm3270 is installed: `pip list | grep ibm3270`
 2. Confirm you are using the correct Python environment: `which python`
-3. Reinstall if needed: `pip install --upgrade --force-reinstall py3270`
+3. Reinstall if needed: `pip install --upgrade --force-reinstall ibm3270`
 
 ### Permission errors on Linux/macOS
 
 If you see permission denied errors after installing via package manager:
 
-- Try `sudo` (not ideal but can unblock you): `sudo pip install py3270`
+- Try `sudo` (not ideal but can unblock you): `sudo pip install ibm3270`
 - Or use a virtual environment to avoid permission issues
 
 ### Next Steps

@@ -5,8 +5,8 @@ from dataclasses import fields
 
 import pytest
 
-import py3270
-from py3270 import (
+import ibm3270
+from ibm3270 import (
     ConnectionState,
     EmulatorMode,
     FieldDefinition,
@@ -214,12 +214,12 @@ def test_field_helper_supports_named_number_fields() -> None:
 
 
 def test_top_level_exports() -> None:
-    assert py3270.TerminalMode is TerminalMode
-    assert py3270.TerminalOptions is TerminalOptions
-    assert py3270.StatusInfo is StatusInfo
-    assert py3270.field is field
+    assert ibm3270.TerminalMode is TerminalMode
+    assert ibm3270.TerminalOptions is TerminalOptions
+    assert ibm3270.StatusInfo is StatusInfo
+    assert ibm3270.field is field
 
 
 def test_version() -> None:
-    assert isinstance(py3270.__version__, str)
-    assert py3270.__version__.split(".") == ["0", "1", "0"]
+    assert isinstance(ibm3270.__version__, str)
+    assert ibm3270.__version__.split(".") == ["0", "1", "0"]
